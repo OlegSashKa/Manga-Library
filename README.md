@@ -22,7 +22,7 @@
 - ✅ [WorldTimeAPI](https://api-ninjas.com/api/worldtime) - текущее время в Токио
 - ✅ [ComicBooksAPI](https://github.com/yashkathe/Download-ComicBooks-API) - расписание выхода манги
 
-- ## 🏗 Архитектура
+- ## Архитектура
 ~~~
 app/
 ├── data/
