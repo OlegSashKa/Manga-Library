@@ -996,11 +996,23 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
               Expanded(
                 child: DatabaseInfoWidget(
                   databaseInfoService: _databaseInfoService,
-                  onExportDatabase: () async {
-                    await _mangaRepository.exportDatabaseToDownloads();
+                  onExportDatabase: () async {try {
+                    final pathFile = await _mangaRepository.exportDatabaseToDownloads();
+                    final shortPath = pathFile.replaceAll('/storage/emulated/', '');
                     ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('База экспортирована в Загрузки'))
+                        SnackBar(
+                          content: Text('База экспортирована: $shortPath'),
+                          duration: Duration(seconds: 4),
+                        )
                     );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Ошибка: $e'),
+                            backgroundColor: Colors.red,
+                          )
+                      );
+                    }
                   },
                 ),
               ),
