@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // ← ДОБАВИЛИ ЭТОТ ИМПОРТ
-import 'package:mangalibrary/presentation/auth/auth_screen.dart';
-import 'package:mangalibrary/presentation/library/time_provider.dart'; // ← ДОБАВИЛИ ЭТОТ ИМПОРТ
+import 'package:provider/provider.dart';
+import 'package:mangalibrary/presentation/library/library_screen.dart';
+import 'package:mangalibrary/presentation/library/time_provider.dart';
 
 void main() {
   runApp(const MangaLibraryApp());
@@ -12,11 +12,11 @@ class MangaLibraryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider( // ← ЗАМЕНИЛИ MaterialApp на MultiProvider
+    return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TimeProvider()), // ← ДОБАВИЛИ ПРОВАЙДЕР
+        ChangeNotifierProvider(create: (_) => TimeProvider()),
       ],
-      child: MaterialApp( // ← MaterialApp теперь внутри MultiProvider
+      child: MaterialApp(
         title: 'Manga Library',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
@@ -25,7 +25,7 @@ class MangaLibraryApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: const AuthScreen(),
+        home: const LibraryScreen(),
         debugShowCheckedModeBanner: false,
       ),
     );

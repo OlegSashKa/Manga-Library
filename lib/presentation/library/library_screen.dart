@@ -7,6 +7,7 @@ import '../../domain/models/manga.dart';
 import '../../domain/models/schedule.dart';
 import '../manga_details/manga_details_screen.dart';
 import 'time_provider.dart';
+import '../../core/services/app_info_service.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -15,11 +16,14 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
+class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateMixin{
   int _currentIndex = 0; // 0 - библиотека, 1 - расписание
   final List<Manga> _mangaList = MockData.getMockManga();
   final List<ScheduleItem> _scheduleList = MockScheduleData.getMockSchedule();
   Timer? _timer;
+  bool _isDragging = false; // ← Добавляем сюда
+  double _dragOffset = 0.0;
+  String textAppInfo = 'Загрузка...';
 
   // Переменные для поиска
   final TextEditingController _searchController = TextEditingController();
@@ -32,7 +36,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     _filteredMangaList = _mangaList;
     _filteredScheduleList = _scheduleList;
+    _loadAppVersion();
     _startAutoRefresh();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final appInfo = AppInfoService();
+    await appInfo.initialize();
+    setState(() {
+      textAppInfo = appInfo.versionDetailed;
+    });
   }
 
   @override
@@ -43,7 +56,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _startAutoRefresh() {
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
       Provider.of<TimeProvider>(context, listen: false).updateTime();
     });
   }
@@ -130,8 +143,154 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onPressed: _toggleSearch,
             ),
           IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {},
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              double startDragY = 0;
+              double currentOffset = 0;
+              bool isDragging = false;
+              bool isTapped = false;
+
+              showModalBottomSheet(
+                context: context,
+                builder: (context) => StatefulBuilder(
+                  builder: (context, setState) => GestureDetector(
+                    onTapDown: (details) {
+                      // Меняем цвет при нажатии на верхнюю панель
+                      if (details.localPosition.dy < 100) {
+                        setState(() {
+                          isTapped = true;
+                        });
+                      }
+                    },
+                    onTapUp: (details) {
+                      setState(() {
+                        isTapped = false;
+                      });
+                    },
+                    onTapCancel: () {
+                      setState(() {
+                        isTapped = false;
+                      });
+                    },
+                    onVerticalDragStart: (details) {
+                      startDragY = details.globalPosition.dy;
+                      isDragging = true;
+                      // Меняем цвет при начале dragging
+                      setState(() {
+                        isTapped = true;
+                      });
+                    },
+                    onVerticalDragUpdate: (details) {
+                      if (isDragging) {
+                        double deltaY = details.globalPosition.dy - startDragY;
+                        double newOffset = deltaY.clamp(0.0, 300.0);
+
+                        setState(() {
+                          currentOffset = newOffset;
+                        });
+                      }
+                    },
+                    onVerticalDragEnd: (details) {
+                      if (isDragging) {
+                        if (currentOffset > 150) {
+                          Navigator.pop(context);
+                        } else {
+                          setState(() {
+                            currentOffset = 0;
+                            isTapped = false; // Возвращаем обычный цвет
+                          });
+                        }
+                        isDragging = false;
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: Duration(milliseconds: 200),
+                      transform: Matrix4.translationValues(0, currentOffset, 0),
+                      curve: Curves.easeOut,
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white,
+                              Colors.deepPurple[100]!,
+                            ],
+                            stops: [0.0, 1.0],
+                          ),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(25),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Верхняя панель с изменением цвета
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.only(top: 15, bottom: 20),
+                              child: Center(
+                                child: Container(
+                                  width: 120,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isTapped || currentOffset > 0
+                                        ? Colors.deepPurple
+                                        : Colors.grey[400],
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Основной контент
+                            Container(
+                              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    'Работа выполнена Александром А.В.\n'
+                                        'Из ИТ-41\n\n'
+                                        'Информация о приложении:\n'
+                                        'Написан на Flutter\n'
+                                        '${textAppInfo}\n',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      height: 1.4,
+                                      color: Colors.grey[700],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+
+                                  SizedBox(height: 25),
+
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.symmetric(horizontal: 45, vertical: 12),
+                                    ),
+                                    child: Text('Закрыть'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                enableDrag: false,
+                isDismissible: true,
+                useSafeArea: true,
+              );
+            },
           ),
         ],
       ),
