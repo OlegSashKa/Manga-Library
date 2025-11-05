@@ -886,7 +886,21 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     print('Добавить новую мангу');
   }
   Widget _buildDatabaseInfoContent(BuildContext context, StateSetter setState) {
-    return DatabaseInfoWidget(databaseInfoService: _databaseInfoService);
+    return DatabaseInfoWidget(
+      databaseInfoService: _databaseInfoService,
+      onExportDatabase: () async {
+        try {
+          await _mangaRepository.exportDatabaseToDownloads();
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('База данных экспортирована в файл'))
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Ошибка экспорта: $e'))
+          );
+        }
+      },
+    );
   }
   Widget _buildInfoTab(String text, int index, StateSetter setState) {
     return ElevatedButton(
@@ -950,18 +964,63 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   void _showDatabaseInfo(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Информация о БД'),
-        content: Container(
-          width: double.maxFinite,
-          child: DatabaseInfoWidget(databaseInfoService: _databaseInfoService),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Закрыть'),
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: 600, maxHeight: 700),
+          child: Column(
+            children: [
+              // Заголовок
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.storage, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text(
+                      'Информация о Базе Данных',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Контент
+              Expanded(
+                child: DatabaseInfoWidget(
+                  databaseInfoService: _databaseInfoService,
+                  onExportDatabase: () async {
+                    await _mangaRepository.exportDatabaseToDownloads();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('База экспортирована в Загрузки'))
+                    );
+                  },
+                ),
+              ),
+
+              // Кнопка закрыть
+              Container(
+                padding: EdgeInsets.all(16),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    minimumSize: Size(200, 50),
+                  ),
+                  child: Text('Закрыть'),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

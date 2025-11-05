@@ -5,10 +5,12 @@ import '../../../domain/models/manga.dart';
 
 class DatabaseInfoWidget extends StatelessWidget {
   final DatabaseInfoService databaseInfoService;
+  final VoidCallback onExportDatabase;
 
   const DatabaseInfoWidget({
     super.key,
     required this.databaseInfoService,
+    required this.onExportDatabase,
   });
 
   @override
@@ -72,20 +74,12 @@ class DatabaseInfoWidget extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        databaseInfoService.exportToConsole(dbInfo.allMangas);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Данные БД выведены в консоль'),
-                              duration: Duration(seconds: 2),
-                            )
-                        );
-                      },
+                      onPressed: onExportDatabase, // ← Используем колбэк
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                       ),
-                      child: Text('Экспорт в консоль'),
+                      child: Text('Экспорт БД в файл'),
                     ),
                   ),
                   SizedBox(width: 10),
