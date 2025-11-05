@@ -153,134 +153,154 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
               showModalBottomSheet(
                 context: context,
                 builder: (context) => StatefulBuilder(
-                  builder: (context, setState) => GestureDetector(
-                    onTapDown: (details) {
-                      // Меняем цвет при нажатии на верхнюю панель
-                      if (details.localPosition.dy < 100) {
-                        setState(() {
-                          isTapped = true;
-                        });
-                      }
-                    },
-                    onTapUp: (details) {
-                      setState(() {
-                        isTapped = false;
-                      });
-                    },
-                    onTapCancel: () {
-                      setState(() {
-                        isTapped = false;
-                      });
-                    },
-                    onVerticalDragStart: (details) {
-                      startDragY = details.globalPosition.dy;
-                      isDragging = true;
-                      // Меняем цвет при начале dragging
-                      setState(() {
-                        isTapped = true;
-                      });
-                    },
-                    onVerticalDragUpdate: (details) {
-                      if (isDragging) {
-                        double deltaY = details.globalPosition.dy - startDragY;
-                        double newOffset = deltaY.clamp(0.0, 300.0);
-
-                        setState(() {
-                          currentOffset = newOffset;
-                        });
-                      }
-                    },
-                    onVerticalDragEnd: (details) {
-                      if (isDragging) {
-                        if (currentOffset > 150) {
-                          Navigator.pop(context);
-                        } else {
-                          setState(() {
-                            currentOffset = 0;
-                            isTapped = false; // Возвращаем обычный цвет
-                          });
-                        }
-                        isDragging = false;
-                      }
-                    },
-                    child: AnimatedContainer(
-                      duration: Duration(milliseconds: 200),
-                      transform: Matrix4.translationValues(0, currentOffset, 0),
-                      curve: Curves.easeOut,
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white,
-                              Colors.deepPurple[100]!,
-                            ],
-                            stops: [0.0, 1.0],
+                  builder: (context, setState) => Stack(
+                    children: [
+                      // Основной контент
+                      AnimatedContainer(
+                        duration: Duration(milliseconds: 200),
+                        transform: Matrix4.translationValues(0, currentOffset, 0),
+                        curve: Curves.easeOut,
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white,
+                                Colors.deepPurple[100]!,
+                              ],
+                              stops: [0.0, 1.0],
+                            ),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(25),
+                            ),
                           ),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(25),
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Верхняя панель с изменением цвета
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.only(top: 15, bottom: 20),
-                              child: Center(
-                                child: Container(
-                                  width: 120,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: isTapped || currentOffset > 0
-                                        ? Colors.deepPurple
-                                        : Colors.grey[400],
-                                    borderRadius: BorderRadius.circular(10),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Верхняя панель с индикатором
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.only(top: 15, bottom: 20),
+                                child: Center(
+                                  child: Container(
+                                    width: 120,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: isTapped || currentOffset > 0
+                                          ? Colors.deepPurple
+                                          : Colors.grey[400],
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
 
-                            // Основной контент
-                            Container(
-                              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Работа выполнена Александром А.В.\n'
-                                        'Из ИТ-41\n\n'
-                                        'Информация о приложении:\n'
-                                        'Написан на Flutter\n'
-                                        '${textAppInfo}\n',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      height: 1.4,
-                                      color: Colors.grey[700],
+                              // Основной контент
+                              Container(
+                                padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Работа выполнена Александром А.В.\n'
+                                          'Из ИТ-41\n\n'
+                                          'Информация о приложении:\n'
+                                          'Написан на Flutter\n'
+                                          '${textAppInfo}\n',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        height: 1.4,
+                                        color: Colors.grey[700],
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
 
-                                  SizedBox(height: 25),
+                                    SizedBox(height: 25),
 
-                                  ElevatedButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.deepPurple,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(horizontal: 45, vertical: 12),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.deepPurple,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(horizontal: 45, vertical: 12),
+                                      ),
+                                      child: Text('Закрыть'),
                                     ),
-                                    child: Text('Закрыть'),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+
+                      // 👇 GestureDetector ТОЛЬКО для прямоугольной области
+                      Positioned(
+                        top: 15, // Такая же позиция как у индикатора
+                        left: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTapDown: (details) {
+                            setState(() {
+                              isTapped = true;
+                            });
+                          },
+                          onTapUp: (details) {
+                            setState(() {
+                              isTapped = false;
+                            });
+                          },
+                          onTapCancel: () {
+                            setState(() {
+                              isTapped = false;
+                            });
+                          },
+                          onVerticalDragStart: (details) {
+                            startDragY = details.globalPosition.dy;
+                            isDragging = true;
+                            setState(() {
+                              isTapped = true;
+                            });
+                          },
+                          onVerticalDragUpdate: (details) {
+                            if (isDragging) {
+                              double deltaY = details.globalPosition.dy - startDragY;
+                              double newOffset = deltaY.clamp(0.0, 300.0);
+
+                              setState(() {
+                                currentOffset = newOffset;
+                              });
+                            }
+                          },
+                          onVerticalDragEnd: (details) {
+                            if (isDragging) {
+                              if (currentOffset > 150) {
+                                Navigator.pop(context);
+                              } else {
+                                setState(() {
+                                  currentOffset = 0;
+                                  isTapped = false;
+                                });
+                              }
+                              isDragging = false;
+                            }
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            height: 40, // 👈 Высота зоны dragging (включает индикатор + отступы)
+                            color: Colors.transparent, // Прозрачная, но перехватывает жесты
+                            child: Center(
+                              child: Container(
+                                width: 120,
+                                height: 6,
+                                color: Colors.transparent, // Индикатор будет виден через основной контент
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
