@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/data/mock_data.dart';
+import '../../core/services/database_info_service.dart';
 import '../../core/data/mock_schedule_data.dart';
 import '../../domain/models/manga.dart';
 import '../../domain/models/schedule.dart';
 import '../manga_details/manga_details_screen.dart';
 import 'time_provider.dart';
 import '../../core/services/app_info_service.dart';
+import '../../core/repositories/manga_repository.dart';
+import '../../core/ui/components/database_info_widget.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -18,8 +20,11 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateMixin{
   int _currentIndex = 0; // 0 - библиотека, 1 - расписание
-  final List<Manga> _mangaList = MockData.getMockManga();
+  final List<Manga> _mangaList = []; //был = MockData.getMockManga()
+  final MangaRepository _mangaRepository = MangaRepository();
   final List<ScheduleItem> _scheduleList = MockScheduleData.getMockSchedule();
+  late final DatabaseInfoService _databaseInfoService;
+  int _currentInfoTab = 0;
   Timer? _timer;
   bool _isDragging = false; // ← Добавляем сюда
   double _dragOffset = 0.0;
@@ -34,10 +39,24 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _filteredMangaList = _mangaList;
+    _databaseInfoService = DatabaseInfoService(_mangaRepository);
+    _loadMangaFromDatabase();
     _filteredScheduleList = _scheduleList;
     _loadAppVersion();
     _startAutoRefresh();
+  }
+
+  Future<void> _loadMangaFromDatabase() async {
+    try {
+      final mangaFromDb = await _mangaRepository.loadManga();
+      setState(() {
+        _mangaList.clear();
+        _mangaList.addAll(mangaFromDb);
+        _filteredMangaList = _mangaList;
+      });
+    } catch (e) {
+      print('Ошибка загрузки из БД: $e');
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -197,7 +216,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                                 ),
                               ),
 
-                              // Основной контент
+                              // Основной контент - информация о приложении
                               Container(
                                 padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
                                 child: Column(
@@ -207,7 +226,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                                           'Из ИТ-41\n\n'
                                           'Информация о приложении:\n'
                                           'Написан на Flutter\n'
-                                          '${textAppInfo}\n',
+                                          '$textAppInfo\n',
                                       style: TextStyle(
                                         fontSize: 16,
                                         height: 1.4,
@@ -218,6 +237,25 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
 
                                     SizedBox(height: 25),
 
+                                    // Кнопка "Информация о БД" вместо "Закрыть"
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        // Закрываем текущее окно
+                                        Navigator.pop(context);
+                                        // Открываем информацию о БД в новом окне
+                                        _showDatabaseInfo(context);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(horizontal: 45, vertical: 12),
+                                      ),
+                                      child: Text('Статистика приложения'),
+                                    ),
+
+                                    SizedBox(height: 10),
+
+                                    // Кнопка закрыть
                                     ElevatedButton(
                                       onPressed: () => Navigator.pop(context),
                                       style: ElevatedButton.styleFrom(
@@ -237,7 +275,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
 
                       // 👇 GestureDetector ТОЛЬКО для прямоугольной области
                       Positioned(
-                        top: 15, // Такая же позиция как у индикатора
+                        top: 15,
                         left: 0,
                         right: 0,
                         child: GestureDetector(
@@ -288,13 +326,13 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                           },
                           child: Container(
                             width: double.infinity,
-                            height: 40, // 👈 Высота зоны dragging (включает индикатор + отступы)
-                            color: Colors.transparent, // Прозрачная, но перехватывает жесты
+                            height: 40,
+                            color: Colors.transparent,
                             child: Center(
                               child: Container(
                                 width: 120,
                                 height: 6,
-                                color: Colors.transparent, // Индикатор будет виден через основной контент
+                                color: Colors.transparent,
                               ),
                             ),
                           ),
@@ -788,15 +826,143 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     );
   }
 
-  void _openMangaDetails(Manga manga) {
-    Navigator.of(context).push(
+  void _openMangaDetails(Manga manga) async {
+    final updatedManga = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => MangaDetailsScreen(manga: manga),
+        builder: (context) => MangaDetailsScreen(
+          manga: manga,
+          onDelete: () async {
+            try {
+              // Удаляем мангу из базы данных
+              await _mangaRepository.removeManga(manga.id);
+
+              // Показываем уведомление
+              ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Манга "${manga.title}" удалена'))
+              );
+
+              // Обновляем список манг
+              await _loadMangaFromDatabase();
+
+            } catch (e) {
+              // Обработка ошибок
+              ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Ошибка при удалении: $e'))
+              );
+            }
+          },
+        ),
+      ),
+    );
+
+    // Если вернулись с обновленными данными (не через удаление)
+    if (updatedManga != null) {
+      await _mangaRepository.updateReadingProgress(
+          updatedManga.id,
+          updatedManga.progress,
+          updatedManga.currentPage
+      );
+      await _loadMangaFromDatabase();
+    }
+  }
+
+  void _addNewManga() async {
+    final newManga = Manga(
+      id: DateTime.now().millisecondsSinceEpoch.toString(), // уникальный ID
+      title: 'Новая манга',
+      author: 'Автор',
+      coverUrl: '',
+      volume: 1,
+      progress: 0.0,
+      tags: ['новое'],
+      status: 'В планах',
+      currentPage: 0,
+      totalPages: 100,
+      type: 'manga',
+    );
+
+    await _mangaRepository.saveManga(newManga);
+    await _loadMangaFromDatabase(); // Перезагружаем список
+    print('Добавить новую мангу');
+  }
+  Widget _buildDatabaseInfoContent(BuildContext context, StateSetter setState) {
+    return DatabaseInfoWidget(databaseInfoService: _databaseInfoService);
+  }
+  Widget _buildInfoTab(String text, int index, StateSetter setState) {
+    return ElevatedButton(
+      onPressed: () {
+        setState(() {
+          _currentInfoTab = index;
+        });
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _currentInfoTab == index
+            ? Colors.deepPurple
+            : Colors.grey[300],
+        foregroundColor: _currentInfoTab == index
+            ? Colors.white
+            : Colors.black87,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        padding: EdgeInsets.symmetric(vertical: 8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12),
       ),
     );
   }
 
-  void _addNewManga() {
-    print('Добавить новую мангу');
+  Widget _buildAppInfoContent() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        children: [
+          Text(
+            'Работа выполнена Александром А.В.\n'
+                'Из ИТ-41\n\n'
+                'Информация о приложении:\n'
+                'Написан на Flutter\n'
+                '$textAppInfo\n',
+            style: TextStyle(
+              fontSize: 16,
+              height: 1.4,
+              color: Colors.grey[700],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 25),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 45, vertical: 12),
+            ),
+            child: Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDatabaseInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Информация о БД'),
+        content: Container(
+          width: double.maxFinite,
+          child: DatabaseInfoWidget(databaseInfoService: _databaseInfoService),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
   }
 }

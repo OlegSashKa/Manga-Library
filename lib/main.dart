@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mangalibrary/presentation/library/library_screen.dart';
 import 'package:mangalibrary/presentation/library/time_provider.dart';
+import 'core/services/data_initializer.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final dataInitializer = DataInitializer();
+  await dataInitializer.initializeDefaultData();
+
   runApp(const MangaLibraryApp());
 }
 

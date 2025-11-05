@@ -3,10 +3,12 @@ import '../../domain/models/manga.dart';
 
 class MangaDetailsScreen extends StatelessWidget {
   final Manga manga;
+  final VoidCallback onDelete;
 
   const MangaDetailsScreen({
     super.key,
     required this.manga,
+    required this.onDelete,
   });
 
   @override
@@ -24,7 +26,6 @@ class MangaDetailsScreen extends StatelessWidget {
             itemBuilder: (BuildContext context) => [
               const PopupMenuItem(value: 'edit', child: Text('Редактировать')),
               const PopupMenuItem(value: 'delete', child: Text('Удалить')),
-              const PopupMenuItem(value: 'share', child: Text('Поделиться')),
             ],
           ),
         ],
@@ -357,7 +358,7 @@ class MangaDetailsScreen extends StatelessWidget {
             onPressed: () {
               Navigator.of(context).pop();
               Navigator.of(context).pop();
-              // TODO: Удалить мангу из базы данных
+              onDelete();
             },
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,

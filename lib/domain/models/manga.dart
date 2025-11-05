@@ -1,3 +1,4 @@
+// domain/models/manga.dart - РАСШИРИМ текущую модель
 class Manga {
   final String id;
   final String title;
@@ -10,6 +11,8 @@ class Manga {
   final int currentPage;
   final int totalPages;
   final DateTime? nextChapterDate;
+  final String type; //'text' или 'manga'
+  final DateTime createdAt;
 
   Manga({
     required this.id,
@@ -23,5 +26,7 @@ class Manga {
     required this.currentPage,
     required this.totalPages,
     this.nextChapterDate,
-  });
+    this.type = 'manga', // ← Значение по умолчанию
+    DateTime? createdAt, // ← Сделаем опциональным
+  }) : createdAt = createdAt ?? DateTime.now(); // ← Если не указано - текущее время
 }
