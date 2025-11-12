@@ -608,21 +608,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.purple,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      book.getBookType(),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -631,6 +616,22 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Container(
+                  //   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  //   decoration: BoxDecoration(
+                  //     color: Colors.purple,
+                  //     borderRadius: BorderRadius.circular(12),
+                  //   ),
+                  //   child: Text(
+                  //     book.getBookType(),
+                  //     style: TextStyle(
+                  //       color: Colors.white,
+                  //       fontSize: 10,
+                  //       fontWeight: FontWeight.bold,
+                  //     ),
+                  //   ),
+                  // ),
+                  SizedBox(height: 4),
                   if (book.author.isNotEmpty) ...[
                     Text(
                       book.author,
@@ -694,16 +695,17 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                     SizedBox(height: 8),
                     Wrap(
                       spacing: 4,
-                      children: book.tags.take(2).map((tag) =>
-                          Chip(
-                            label: Text(
-                              tag,
-                              style: TextStyle(fontSize: 8),
-                            ),
-                            materialTapTargetSize: MaterialTapTargetSize
-                                .shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          )).toList(),
+                      children: book.tags.take(2).map((tag) {
+                        print('🔍 Отрисовываем тег: "${tag}"');
+                        return Chip(
+                          label: Text(
+                            tag,
+                            style: TextStyle(fontSize: 8),
+                          ),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        );
+                      }).toList(),
                     ),
                   ],
                 ],
@@ -761,15 +763,10 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   }
 
   void _deleteBook(Book book) {
-    // Логика удаления книги
-    // Например:
-    // - Удалить из базы данных
-    // - Обновить состояние списка
-    // - Показать сообщение об удалении
+    _loadLibraryData();
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Книга "${book.title}" удалена'),
-      ),
+      SnackBar(content: Text('Книга "${book.title}" удалена')),
     );
   }
 

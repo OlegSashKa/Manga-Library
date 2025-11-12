@@ -179,6 +179,8 @@ class FileService{
 
       final copiedFile = await sourceFile.copy(destinationPath);
 
+      clearFilePickerCache();
+
       // Получаем размер файла
       final fileSize = await copiedFile.length();
 
@@ -186,7 +188,6 @@ class FileService{
       if (bookType == BookType.manga) {
         await _createChaptersDirectory(bookTitle);
       }
-
       return BookImportResult(
         bookPath: bookDir.path,
         filePath: copiedFile.path,
@@ -229,4 +230,30 @@ class FileService{
 
     throw Exception('Файл книги не найден в папке $bookTitle');
   }
+
+  static Future<void> clearFilePickerCache() async {
+    try {
+      // Получаем корневую директорию приложения
+      final appDir = await getApplicationDocumentsDirectory();
+      final appPath = appDir.parent.path; // Поднимаемся на уровень выше
+
+      final cacheDir = Directory('$appPath/cache/file_picker');
+      print("путь до кэша: ${cacheDir.path}");
+      print("путь до кэша существует: ${await cacheDir.exists()}");
+
+      if (await cacheDir.exists()) {
+        // Сначала посмотрим что внутри
+        final files = await cacheDir.list(recursive: true).toList();
+        print("Найдено файлов/папок в кеше: ${files.length}");
+
+        await cacheDir.delete(recursive: true);
+        print('✅ Кеш файлового пикера очищен');
+      } else {
+        print('❌ Папка кеша не найдена');
+      }
+    } catch (e) {
+      print('❌ Ошибка очистки кеша файлового пикера: $e');
+    }
+  }
+
 }

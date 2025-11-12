@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mangalibrary/core/database/tables/books_table.dart';
+import 'package:mangalibrary/core/services/file_service.dart';
 import 'package:mangalibrary/ui/book_details_screen/chapter_section.dart';
 import '../../domain/models/book.dart';
 import 'package:mangalibrary/core/data/mock_data.dart';
@@ -252,7 +254,7 @@ class BookDetailsScreen extends StatelessWidget {
     }
   }
 
-  void _showDeleteDialog(BuildContext context){
+  void _showDeleteDialog(BuildContext context) async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -260,9 +262,9 @@ class BookDetailsScreen extends StatelessWidget {
         content: Text('Книга "${book.title}" будет удалена безвозвратно!'),
         actions: [
           TextButton(
-            onPressed: (){
+            onPressed: () async {
               Navigator.pop(context);
-              onDelete();
+              await _deleteBookCompletely(context); // Удаляем книгу
               Navigator.pop(context);
             },
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -343,4 +345,41 @@ class BookDetailsScreen extends StatelessWidget {
     
   }
 
+  Future<void> _deleteBookCompletely(BuildContext context) async {
+    // onDelete();
+    try{
+      final bookTable = BooksTable();
+
+      await _deleteBookFiles();
+
+      if(book.id != null){
+        await bookTable.deleteBook(book.id!);
+      }
+
+      onDelete();
+
+    }catch(e){
+      print('Ошибка при удалении книги: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при удалении книги: $e')),
+      );
+    }
+
+  }
+
+  Future<void> _deleteBookFiles() async {
+    try{
+      final bookDir = await FileService.getBookDirectory(book.title);
+      // Проверяем существует ли папка
+      if (await bookDir.exists()) {
+        // Удаляем всю папку с содержимым рекурсивно
+        await bookDir.delete(recursive: true);
+        print('Папка книги удалена: ${bookDir.path}');
+      } else {
+        print('Папка книги не существует: ${bookDir.path}');
+      }
+    }catch(e){
+      print('Ошибка при удалении файлов книги: $e');
+    }
+  }
 }

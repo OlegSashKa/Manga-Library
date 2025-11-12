@@ -3,40 +3,41 @@ import 'package:mangalibrary/enums/book_enums.dart';
 
 class Book {
   int? id;
-  String title;      // Название книги
+  String title; // Название книги
 
-  String author;    // Автор (может не быть)
+  String author; // Автор (может не быть)
 
   // ТИП КНИГИ (манга или текст)
-  BookType bookType;       // 'manga' или 'text'
+  BookType bookType; // 'manga' или 'text'
 
   // ИНФОРМАЦИЯ О ФАЙЛЕ (где живет книга)
-  String filePath;   // Путь к файлу на телефоне(скопированый файл в папке приложения)
+  String filePath; // Путь к файлу на телефоне(скопированый файл в папке приложения)
   String fileFormat; // Формат: cbz, epub, txt и т.д.
-  int fileSize;      // Размер файла
+  int fileSize; // Размер файла
 
   // ПРОГРЕСС ЧТЕНИЯ (на какой странице остановились)
-  int currentPage;   // Текущая страница
-  int totalPages;    // Всего страниц
-  double progress;   // Прогресс в процентах (0.0 до 1.0)
+  int currentPage; // Текущая страница
+  int totalPages; // Всего страниц
+  double progress; // Прогресс в процентах (0.0 до 1.0)
 
   // ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ
   String? coverImagePath; // Путь к обложке
-  BookStatus status;          // Статус: 'reading', 'planned', 'completed'
-  DateTime addedDate;     // Когда добавили книгу
-  DateTime lastDateOpen;     // Дата последнего открытия
+  BookStatus status; // Статус: 'reading', 'planned', 'completed'
+  DateTime addedDate; // Когда добавили книгу
+  DateTime lastDateOpen; // Дата последнего открытия
   Duration readingTime;
-  bool isFavorite;        // В избранном или нет
+  bool isFavorite; // В избранном или нет
   List<String> tags;
 
   List<BookChapter> chapters;
   int currentChapterIndex;
 
   bool get hasReadingProgress => currentPage > 0;
+
   String get actionButtonText => hasReadingProgress ? 'ПРОДОЛЖИТЬ' : 'НАЧАТЬ';
 
   Book({
-    this.id,              // id может не быть при создании новой книги
+    this.id, // id может не быть при создании новой книги
     required this.title,
     this.author = 'Неизвестен',
     required this.bookType,
@@ -58,7 +59,7 @@ class Book {
   });
 
   Map<String, dynamic> toMap() {
-    final map =  <String, dynamic>{
+    final map = <String, dynamic>{
       'title': title,
       'author': author,
       'bookType': bookType.name,
@@ -74,7 +75,7 @@ class Book {
       'last_date_open': lastDateOpen.millisecondsSinceEpoch,
       'reading_time': readingTime.inMilliseconds,
       'is_favorite': isFavorite ? 1 : 0,
-      'tags': tags.join(','),
+      'tags': tags.isNotEmpty ? tags.join(',') : null,
       'current_chapter_index': currentChapterIndex,
       // chapters нужно сохранять отдельно, так как это список объектов
     };
@@ -143,7 +144,18 @@ class Book {
     }
   }
 
-   String getBookType(){
+  static String getBookTypeByName(String bookTypeName) {
+    switch (bookTypeName) {
+      case BookType.manga:
+        return 'Манга';
+      case BookType.text:
+        return 'Текстовая';
+      default:
+        return 'Текстовая';
+    }
+  }
+
+  String getBookType() {
     switch (bookType.name) {
       case BookType.manga:
         return 'Манга';

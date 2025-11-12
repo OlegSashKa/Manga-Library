@@ -310,7 +310,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
         title: _titleController.text,
         author: _authorController.text.isEmpty ? 'Неизвестен' : _authorController.text,
         bookType: importResult.bookType,      // Тип определился автоматически!
-        filePath: importResult.filePath,      // Путь к скопированному файлу
+        filePath: importResult.bookPath,      // Путь к скопированному файлу
         fileFormat: path.extension(importResult.filePath).replaceFirst('.', ''),
         fileSize: importResult.fileSize,      // Реальный размер файла
         addedDate: DateTime.now(),
@@ -322,8 +322,8 @@ class _AddBookDialogState extends State<AddBookDialog> {
         status: BookStatus.planned,
         readingTime: Duration.zero,
         isFavorite: false,
-        tags: [],
-        chapters: [],
+        tags: [Book.getBookTypeByName(importResult.bookType.name)],
+        chapters: const [],
         currentChapterIndex: 0,
       );
 

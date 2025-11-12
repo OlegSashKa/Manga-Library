@@ -17,7 +17,7 @@ class MockData {
         totalPages: 0,
         progress: 0,
         status: BookStatus.planned,
-        tags: ['shyonen', 'приключения', 'ниндзя'],
+        tags: ['текстовая','тестовая'],
         addedDate: DateTime.now(),
         lastDateOpen: DateTime.now(),
         readingTime: Duration(hours: 99, minutes: 60, seconds: 60),
