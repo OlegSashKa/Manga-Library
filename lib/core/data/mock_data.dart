@@ -1,66 +1,35 @@
-import '../../domain/models/manga.dart';
+import '../../domain/models/book.dart';
+import 'package:mangalibrary/enums/book_enums.dart';
 
 class MockData {
-  static List<Manga> getMockManga() {
-    final now = DateTime.now();
-
+  static List<Book> getMockManga() {
     return [
-      Manga(
-        id: '1',
-        title: 'Наруто',
-        author: 'Масаши Кишимото',
-        coverUrl: '',
-        volume: 1,
-        progress: 0.6,
-        tags: ['сёнэн', 'приключения', 'ниндзя'],
-        status: 'Читаю',
-        currentPage: 150,
-        totalPages: 250,
-        nextChapterDate: now.add(const Duration(days: 3)),
-      ),
-      Manga(
-        id: '2',
-        title: 'One Piece',
-        author: 'Эйитиро Ода',
-        coverUrl: '',
-        volume: 104,
-        progress: 0.8,
-        tags: ['сёнэн', 'пираты', 'комедия'],
-        status: 'Читаю',
-        currentPage: 320,
-        totalPages: 400,
-        nextChapterDate: now.add(const Duration(days: 1)),
-      ),
-      Manga(
-        id: '3',
-        title: 'Токийский Гул',
-        author: 'Суи Ишида',
-        coverUrl: '',
-        volume: 1,
-        progress: 0.2,
-        tags: ['сэйнэн', 'ужасы', 'драма'],
-        status: 'В планах',
-        currentPage: 50,
-        totalPages: 250,
-        nextChapterDate: null,
-      ),
-      Manga(
-        id: '4',
-        title: 'Атака Титанов',
-        author: 'Хадзиме Исаяма',
-        coverUrl: '',
-        volume: 34,
-        progress: 0.9,
-        tags: ['сэйнэн', 'фэнтези', 'экшен'],
-        status: 'Прочитано',
-        currentPage: 450,
-        totalPages: 500,
-        nextChapterDate: null,
+      Book(
+        id: 1,
+        title: 'Test book',
+        author: 'Alexandr OlegSashka',
+        bookType: BookType.manga,
+        filePath: '',
+        fileFormat: 'pdf',
+        fileSize: 0,
+        currentChapterIndex: 0,
+        currentPage: 0,
+        totalPages: 0,
+        progress: 0,
+        status: BookStatus.planned,
+        tags: ['shyonen', 'приключения', 'ниндзя'],
+        addedDate: DateTime.now(),
+        lastDateOpen: DateTime.now(),
+        readingTime: Duration(hours: 99, minutes: 60, seconds: 60),
       ),
     ];
   }
 
-  static Manga getMangaById(String id) {
+  List<BookChapter> get testChapters {
+    return [];
+  }
+
+  static Book getMangaById(int id) {
     return getMockManga().firstWhere((manga) => manga.id == id);
   }
 }

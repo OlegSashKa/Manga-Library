@@ -1,0 +1,353 @@
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:mangalibrary/core/database/tables/books_table.dart';
+import 'package:mangalibrary/core/services/file_service.dart';
+import 'package:mangalibrary/enums/book_enums.dart';
+import 'package:path/path.dart' as path;
+import 'package:mangalibrary/domain/models/book.dart';
+
+class AddBookDialog extends StatefulWidget {
+
+  final Function(Book) onBookAdded;
+
+  const AddBookDialog({
+    super.key,
+    required this.onBookAdded,
+  });
+
+  @override
+  State<AddBookDialog> createState() => _AddBookDialogState();
+}
+
+class _AddBookDialogState extends State<AddBookDialog> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _authorController = TextEditingController();
+
+  String? _selectedFilePath;
+  String? _fileName;
+  int? _fileSize;
+
+  BookType _selectedType = BookType.manga;
+
+  @override
+  void initState() {
+    super.initState();
+    // Слушаем изменения в поле названия для обновления кнопки
+    _titleController.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _titleController.removeListener(_onTextChanged);
+    _titleController.dispose();
+    _authorController.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    setState(() {}); // Перерисовываем виджет при изменении текста
+  }
+
+  @override
+  Widget build(BuildContext context){
+    return AlertDialog(
+      title: Row(
+        children: [
+          // Icon(Icons.add_circle, color: Colors.deepPurple),
+          SizedBox(width: 8),
+          Text('Добавить книгу')
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Поле для названия книги
+            TextField(
+              controller: _titleController,
+              decoration: InputDecoration(
+                labelText: 'Название книги',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.title),
+              ),
+            ),
+            SizedBox(height: 16),
+            // Поле для автора
+            TextField(
+              controller: _authorController,
+              decoration: InputDecoration(
+                labelText: 'Автор',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.title),
+              ),
+            ),
+            SizedBox(height: 16),
+            // Выбор типа книги
+            // DropdownButtonFormField(
+            //   value: _selectedType,
+            //   decoration: InputDecoration(
+            //     labelText: 'Тип книги',
+            //     border: OutlineInputBorder(),
+            //     prefixIcon: Icon(Icons.menu_book),
+            //   ),
+            //   items: BookType.values.map((type){
+            //     return DropdownMenuItem(
+            //       value: type,
+            //       child: Text(Book.getBookType(type)),
+            //     );
+            //   }).toList(),
+            //   onChanged: (BookType? newValue){
+            //    setState(() {
+            //      _selectedType = newValue!;
+            //    });
+            //   },
+            // ),
+            SizedBox(height: 16),
+            // Кнопка выбора файла
+            Container(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _pickFile,
+                icon: Icon(Icons.attach_file),
+                label: Text('Выбрать файл'),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
+            // Информация о выбранном файле
+            if(_fileName != null) ...[
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _fileName!,
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          if(_fileSize != null) ...[
+                            SizedBox(width: 4),
+                            Text(
+                              'Размер: ${(_fileSize! / 1024 / 1024).toStringAsFixed(2)} MB',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 8),
+            ],
+            Text(
+              '* - обязательные поля',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        // Кнопка отмены
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: Text('Отмена'),
+        ),
+        // Кнопка сохранения
+        ElevatedButton(
+          onPressed: _canSave() ? _saveBook : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepPurple,
+          ),
+          child: Text(
+              'Сохранить',
+              style: TextStyle(
+                color: Colors.white,
+              ),
+          ),
+        )
+      ],
+    );
+  }
+
+  void _pickFile() async {
+    try{
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'epub', 'txt', 'cbz', 'cbr'],
+        allowMultiple: false,
+      );
+
+      if(result == null){
+        // Пользователь отменил выбор - это не ошибка
+        print('Пользователь отменил выбор файла');
+        return; // Просто выходим из функции
+      }
+
+      final file = result.files.single; // Получаем первый файл
+
+      if (file.path == null || file.path!.isEmpty) {
+        _showError('Не удалось получить путь к файлу');
+        return;
+      }
+
+      final fileObject = File(file.path!);
+      if (!await fileObject.exists()) {
+        _showError('Файл не существует или недоступен');
+        return;
+      }
+
+      setState(() {
+        _selectedFilePath = file.path!;
+        _fileName = file.name;
+        _fileSize = file.size;
+      });
+
+      _autoFillBookTitle(file.name);
+
+      print('''
+✅ Файл выбран успешно:
+   Путь: $_selectedFilePath
+   Имя: $_fileName
+   Размер: $_fileSize байт
+   Расширение: ${file.extension}
+''');
+
+    } catch (e){
+      print('Ошибка выбора файла: $e');
+      _showError('Не удалось выбрать файл');
+    }
+  }
+
+  void _autoFillBookTitle(String fileName) {
+    // Убираем расширение файла
+    String title = path.withoutExtension(fileName);
+
+    // Заменяем подчеркивания и дефисы на пробелы
+    title = title.replaceAll('_', ' ').replaceAll('-', ' ');
+
+    // Убираем лишние пробелы
+    title = title.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+    // Делаем первую букву заглавной для каждого слова
+    title = title.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+
+    // Обновляем поле ввода
+    _titleController.text = title;
+
+    // 🔥 ОБЯЗАТЕЛЬНО ВЫЗЫВАЕМ setState ДЛЯ ПЕРЕРИСОВКИ КНОПКИ
+    setState(() {});
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  bool _canSave() {
+    return _titleController.text.isNotEmpty &&
+        _selectedFilePath != null;
+  }
+
+  void _saveBook() async {
+    // Показываем индикатор загрузки
+    if (_selectedFilePath == null || _selectedFilePath!.isEmpty) {
+      _showError('Файл не выбран');
+      return;
+    }
+
+    if (_titleController.text.isEmpty) {
+      _showError('Введите название книги');
+      return;
+    }
+
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: CircularProgressIndicator(),
+        ),
+    );
+
+    try{
+      final booksTable = BooksTable();
+      bool bookExists = await booksTable.doesBookExist(_titleController.text);
+      if (bookExists) {
+        Navigator.pop(context); // Закрываем индикатор
+        _showError('Книга с названием "${_titleController.text}" уже существует в библиотеке');
+        return;
+      }
+
+      BookImportResult importResult  = await FileService.importBook(
+          _selectedFilePath!,
+          _titleController.text
+      );
+
+      Book newBook = Book(
+        title: _titleController.text,
+        author: _authorController.text.isEmpty ? 'Неизвестен' : _authorController.text,
+        bookType: importResult.bookType,      // Тип определился автоматически!
+        filePath: importResult.filePath,      // Путь к скопированному файлу
+        fileFormat: path.extension(importResult.filePath).replaceFirst('.', ''),
+        fileSize: importResult.fileSize,      // Реальный размер файла
+        addedDate: DateTime.now(),
+        lastDateOpen: DateTime.now(),
+        // Добавляем недостающие поля по умолчанию:
+        currentPage: 0,
+        totalPages: 0,
+        progress: 0.0,
+        status: BookStatus.planned,
+        readingTime: Duration.zero,
+        isFavorite: false,
+        tags: [],
+        chapters: [],
+        currentChapterIndex: 0,
+      );
+
+      final bookId = await BooksTable().insertBook(newBook);
+
+      newBook.id = bookId; // Сохраняем ID из базы
+
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Книга "${newBook.title}" успешно добавлена!'),
+            backgroundColor: Colors.green,
+          )
+      );
+
+      widget.onBookAdded(newBook);
+      Navigator.pop(context);
+
+    }catch (e, stackTrace){
+      Navigator.pop(context); // Закрываем индикатор
+      print('❌ КРИТИЧЕСКАЯ ОШИБКА: $e');
+      print('📋 Stack trace: $stackTrace');
+      _showError('Ошибка: ${e.toString()}');
+    }
+  }
+}
