@@ -1,4 +1,5 @@
 import 'package:mangalibrary/core/database/database_helper.dart';
+import 'package:mangalibrary/core/services/chapter_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import '../../../domain/models/book.dart';
@@ -8,19 +9,60 @@ class BooksTable{
 
   Future<int> insertBook(Book book) async {
     final db = await dbHelper.database;
+    final ChapterService chapterService = ChapterService();
 
-    // Создаем копию книги без id для новой записи
+    int bookId;
+
     if (book.id == null) {
-      return await db.insert('books', book.toMap());
+      // Новая книга - вставляем и получаем ID
+      bookId = await db.insert('books', book.toMap());
     } else {
-      // Если id указан, проверяем не существует ли уже книга с таким id
+      // Книга с ID - проверяем существование
       final existingBook = await getBookById(book.id!);
       if (existingBook == null) {
-        return await db.insert('books', book.toMap());
+        bookId = await db.insert('books', book.toMap());
       } else {
-        // Если существует, обновляем
-        return await updateBook(book);
+        // Если существует - обновляем и возвращаем ID
+        await updateBook(book);
+        return book.id!;
       }
+    }
+    // После успешного сохранения книги создаем главы
+    if (bookId > 0) {
+      _createChaptersForBook(book, bookId, chapterService);
+    }
+    return bookId;
+  }
+
+  void _createChaptersForBook(Book book, int bookId, ChapterService chapterService) async {
+    try {
+      // Создаем копию книги с установленным ID
+      final bookWithId = Book(
+        id: bookId,
+        title: book.title,
+        author: book.author,
+        bookType: book.bookType,
+        fileFolderPath: book.fileFolderPath,
+        filePath: book.filePath,
+        fileFormat: book.fileFormat,
+        fileSize: book.fileSize,
+        currentPage: book.currentPage,
+        totalPages: book.totalPages,
+        progress: book.progress,
+        coverImagePath: book.coverImagePath,
+        status: book.status,
+        addedDate: book.addedDate,
+        lastDateOpen: book.lastDateOpen,
+        readingTime: book.readingTime,
+        isFavorite: book.isFavorite,
+        tags: book.tags,
+      );
+
+      await chapterService.createChapterForBook(bookWithId);
+      print('✅ Автоматически созданы главы для: "${book.title}"');
+    } catch (e) {
+      print('⚠️ Ошибка создания глав для "${book.title}": $e');
+      // Продолжаем работу даже если главы не создались
     }
   }
 
@@ -72,6 +114,21 @@ class BooksTable{
       book.toMap(),
       where: 'id = ?',
       whereArgs: [book.id]
+    );
+  }
+
+  Future<int>? updateBookField({
+    required int bookId,
+    required String fieldName,
+    required dynamic value,
+  }) async {
+    final db = await dbHelper.database;
+
+    return await db.update(
+      'books',
+      {fieldName: value},
+      where: 'id = ?',
+      whereArgs: [bookId],
     );
   }
 

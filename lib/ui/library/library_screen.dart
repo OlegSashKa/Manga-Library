@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
+import 'package:mangalibrary/core/utils/book_page_updater.dart';
+import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/book_details_screen.dart';
+import 'package:mangalibrary/ui/library/BookTags.dart';
 import 'package:provider/provider.dart';
 import '../../core/data/mock_schedule_data.dart';
 import '../../domain/models/book.dart';
@@ -15,6 +18,7 @@ import 'package:mangalibrary/ui/add_book_dialog/add_book_dialog.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
+
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -616,21 +620,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Container(
-                  //   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  //   decoration: BoxDecoration(
-                  //     color: Colors.purple,
-                  //     borderRadius: BorderRadius.circular(12),
-                  //   ),
-                  //   child: Text(
-                  //     book.getBookType(),
-                  //     style: TextStyle(
-                  //       color: Colors.white,
-                  //       fontSize: 10,
-                  //       fontWeight: FontWeight.bold,
-                  //     ),
-                  //   ),
-                  // ),
                   SizedBox(height: 4),
                   if (book.author.isNotEmpty) ...[
                     Text(
@@ -693,20 +682,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                   ),
                   if (book.tags.isNotEmpty) ...[
                     SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      children: book.tags.take(2).map((tag) {
-                        print('🔍 Отрисовываем тег: "${tag}"');
-                        return Chip(
-                          label: Text(
-                            tag,
-                            style: TextStyle(fontSize: 8),
-                          ),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        );
-                      }).toList(),
-                    ),
+                    BookTags(tags: book.tags),
                   ],
                 ],
               ),
@@ -737,7 +713,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
             ),
             const SizedBox(height: 8),
             Text(
-              'Добавить мангу',
+              'Добавить книгу',
               style: TextStyle(
                 color: Colors.grey[600],
                 fontSize: 12,
@@ -753,18 +729,52 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   void _openBookDetails(Book book) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (context) => BookDetailsScreen(
-              book: book,
-              onDelete: (){
-                _deleteBook(book);
-              })
-      )
-    );
+        builder: (context) => BookDetailsScreen(
+          book: book,
+          onDelete: () {
+            _deleteBook(book);
+          },
+        ),
+      ),
+    ).then((_) async {
+      final BooksTable booksTable = BooksTable();
+      final Book? updatedBook = await booksTable.getBookById(book.id!);
+      if (updatedBook != null) {
+        // ВЫЧИСЛЯЕМ СТАТУС НА ОСНОВЕ ПРОГРЕССА
+        BookStatus calculateStatus(double progress) {
+          if (progress < 0.1) return BookStatus.planned;
+          if (progress < 1.0) return BookStatus.reading;
+          return BookStatus.completed;
+        }
+
+        BookStatus newStatus = calculateStatus(updatedBook.progress);
+
+        // ОБНОВЛЯЕМ СТАТУС В БАЗЕ ДАННЫХ
+        await booksTable.updateBookField(
+            bookId: book.id!,
+            fieldName: 'status',
+            value: newStatus.name // ← Сохраняем как строку!
+        );
+
+        setState(() {
+          // ОБНОВЛЯЕМ ВЕСЬ ОБЪЕКТ КНИГИ, а не отдельные поля
+          final index = _bookList.indexWhere((b) => b.id == book.id);
+          if (index != -1) {
+            _bookList[index] = Book.fromMap({
+              ...updatedBook.toMap(),
+              'status': newStatus.name // ← Обновляем статус
+            });
+            _filteredBookList = List.from(_bookList);
+          }
+        });
+
+        print("Статус книги обновлен на: $newStatus");
+      }
+    });
+    _loadLibraryData(); // Перезагружаем данные для гарантии
   }
 
   void _deleteBook(Book book) {
-    _loadLibraryData();
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Книга "${book.title}" удалена')),
     );
@@ -780,7 +790,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         ),
     );
   }
-
 
   void _showAppInfo3() {
     double currentHeight = 330.0;
@@ -839,7 +848,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                         setState((){
                           currentHeight -= detalis.primaryDelta!;
                           if(currentHeight > 330.0) currentHeight = 330.0;
-                          print('Перетаскивание: $currentHeight');
                         });
                       },
                       onVerticalDragEnd: (detalis) {
@@ -985,6 +993,63 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                           ),
                         ),
                       ),
+                      Container(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            int current = 0;
+                            int total = 0;
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) => AlertDialog(
+                                title: Text('Пересчёт страниц'),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 16),
+                                    Text('Идёт пересчёт страниц...'),
+                                    SizedBox(height: 8),
+                                    Text('$current / $total'),
+                                  ],
+                                ),
+                              )
+                            );
+                            try{
+                              await BookPageUpdater.recalculateAllBooksPages(
+                                  context,
+                                      (currentProgress, totalCount) {
+                                    setState(() {
+                                      current = currentProgress;
+                                      total = totalCount;
+                                    });
+                                  }
+                              );
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Пересчёт страниц завершён!'))
+                              );
+                            } catch (e) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Ошибка пересчёта: $e'), backgroundColor: Colors.red)
+                              );
+                            }
+
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Пересчёт страниц завершён!'))
+                            );
+                          },
+                          label: Text('Пересичитать все страницы книг'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1072,32 +1137,27 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   }
 
   void _saveNewBookToDatabase(Book newBook) async {
-    try{
-     int newBookId = await _booksTable.insertBook(newBook);
-     newBook.id = newBookId;
-
-      // Добавляем в список
-      // setState(() {
-      //   _bookList.add(newBook);
-      //   _filteredBookList = _bookList;
-      // });
-      _loadLibraryData();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Книга "${newBook.title}" успешно добавлена!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }catch (e){
-      print('Ошибка сохранения книги: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при добавлении книги: $e'),
-            backgroundColor: Colors.red,
-          )
-      );
-    }
+    int newBookId = await _booksTable.insertBook(newBook);
+    newBook.id = newBookId;
+    _loadLibraryData();
+    // try{
+    //
+    //
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     SnackBar(
+    //         content: Text('Книга "${newBook.title}" успешно добавлена!'),
+    //       backgroundColor: Colors.green,
+    //     ),
+    //   );
+    // }catch (e){
+    //   print('Ошибка сохранения книги: $e');
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //       SnackBar(
+    //         content: Text('Ошибка при добавлении книги: $e'),
+    //         backgroundColor: Colors.red,
+    //       )
+    //   );
+    // }
   }
 
   Future<void> _exportDataBase() async {

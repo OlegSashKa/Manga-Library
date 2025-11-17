@@ -5,10 +5,10 @@ class MockData {
   static List<Book> getMockManga() {
     return [
       Book(
-        id: 1,
         title: 'Test book',
         author: 'Alexandr OlegSashka',
         bookType: BookType.manga,
+        fileFolderPath: '',
         filePath: '',
         fileFormat: 'pdf',
         fileSize: 0,

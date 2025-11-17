@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:mangalibrary/core/database/tables/book_view_table.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
+import 'package:mangalibrary/core/services/page_calculator_service.dart';
+import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:path/path.dart' as path;
 import 'package:mangalibrary/domain/models/book.dart';
@@ -23,12 +26,14 @@ class AddBookDialog extends StatefulWidget {
 class _AddBookDialogState extends State<AddBookDialog> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _authorController = TextEditingController();
+  final _tagsController = TextEditingController(); // Контроллер для тегов
 
   String? _selectedFilePath;
   String? _fileName;
   int? _fileSize;
 
   BookType _selectedType = BookType.manga;
+  List<String> _tags = []; // Список тегов
 
   @override
   void initState() {
@@ -84,26 +89,48 @@ class _AddBookDialogState extends State<AddBookDialog> {
               ),
             ),
             SizedBox(height: 16),
-            // Выбор типа книги
-            // DropdownButtonFormField(
-            //   value: _selectedType,
-            //   decoration: InputDecoration(
-            //     labelText: 'Тип книги',
-            //     border: OutlineInputBorder(),
-            //     prefixIcon: Icon(Icons.menu_book),
-            //   ),
-            //   items: BookType.values.map((type){
-            //     return DropdownMenuItem(
-            //       value: type,
-            //       child: Text(Book.getBookType(type)),
-            //     );
-            //   }).toList(),
-            //   onChanged: (BookType? newValue){
-            //    setState(() {
-            //      _selectedType = newValue!;
-            //    });
-            //   },
-            // ),
+            // Поле тегов
+            TextFormField(
+              controller: _tagsController,
+              decoration: InputDecoration(
+                labelText: 'Теги (через запятую)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.tag),
+                hintText: 'фэнтези, приключения, роман',
+              ),
+              onChanged: (value) {
+                setState(() {
+                  // Разделяем строку по запятым, убираем пробелы и пустые элементы
+                  _tags = value.split(',')
+                      .map((tag) => tag.trim())
+                      .where((tag) => tag.isNotEmpty)
+                      .toList();
+                });
+              },
+            ),
+
+            SizedBox(height: 16),
+            if (_tags.isNotEmpty) ...[
+              SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _tags.map((tag) {
+                  return Chip(
+                    label: Text(tag),
+                    backgroundColor: Colors.blue[50],
+                    deleteIcon: Icon(Icons.close, size: 16),
+                    onDeleted: () {
+                      setState(() {
+                        _tags.remove(tag);
+                        _tagsController.text = _tags.join(', ');
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+
             SizedBox(height: 16),
             // Кнопка выбора файла
             Container(
@@ -294,6 +321,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
 
     try{
       final booksTable = BooksTable();
+
       bool bookExists = await booksTable.doesBookExist(_titleController.text);
       if (bookExists) {
         Navigator.pop(context); // Закрываем индикатор
@@ -306,23 +334,59 @@ class _AddBookDialogState extends State<AddBookDialog> {
           _titleController.text
       );
 
+      BookView bookViewSettings = await BookViewTable.getSettings();
+
+      int totalPages = 1;
+      if (importResult.filePath.endsWith('.txt')) {
+        try {
+          final file = File(importResult.filePath);
+          if (await file.exists()) {
+            final content = await file.readAsString();
+
+            final screenSize = MediaQuery.of(context).size;
+            totalPages = PageCalculatorService.calculatePageCount(
+              text: content,
+              pageWidth: screenSize.width - 32,
+              pageHeight: screenSize.height - 200,
+              fontSize: bookViewSettings.fontSize,
+              lineHeight: bookViewSettings.lineHeight,
+              horizontalPadding: 16.0,
+              verticalPadding: 16.0,
+            );
+
+            print('📖 Для книги "${_titleController.text}" рассчитано страниц: $totalPages');
+            print('Использованы настройки: шрифт ${bookViewSettings.fontSize}, интервал ${bookViewSettings.lineHeight}');
+          }
+        } catch (e) {
+          print('⚠️ Ошибка расчёта страниц: $e');
+          // Не прерываем процесс из-за ошибки расчёта
+        }
+      }
+
+      BookStatus calculateStatus(double progress) {
+        if (progress < 0.1) return BookStatus.planned;
+        if (progress < 1.0) return BookStatus.reading;
+        return BookStatus.completed;
+      }
+
       Book newBook = Book(
         title: _titleController.text,
         author: _authorController.text.isEmpty ? 'Неизвестен' : _authorController.text,
         bookType: importResult.bookType,      // Тип определился автоматически!
-        filePath: importResult.bookPath,      // Путь к скопированному файлу
+        fileFolderPath: importResult.bookPath,      // Путь к скопированному файлу
+        filePath: importResult.filePath,      // Путь к скопированному файлу
         fileFormat: path.extension(importResult.filePath).replaceFirst('.', ''),
         fileSize: importResult.fileSize,      // Реальный размер файла
         addedDate: DateTime.now(),
         lastDateOpen: DateTime.now(),
         // Добавляем недостающие поля по умолчанию:
         currentPage: 0,
-        totalPages: 0,
+        totalPages: totalPages,
         progress: 0.0,
-        status: BookStatus.planned,
+        status: calculateStatus(0.0),
         readingTime: Duration.zero,
         isFavorite: false,
-        tags: [Book.getBookTypeByName(importResult.bookType.name)],
+        tags: [Book.getBookTypeByName(importResult.bookType.name), ..._tags],
         chapters: const [],
         currentChapterIndex: 0,
       );

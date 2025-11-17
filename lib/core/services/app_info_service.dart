@@ -7,7 +7,7 @@ class AppInfoService {
   static AppInfoService get instance => _instance;
 
   PackageInfo? _packageInfo;
-
+//Ошибка загрузки книги:
   bool get isInitialized => _packageInfo != null;
 
   Future<void> initialize() async {
@@ -16,7 +16,7 @@ class AppInfoService {
     }
   }
 
-  AppInfoData  get appInfo{
+  AppInfoData get appInfo{
     if(!isInitialized) throw Exception('Сначала вызовите initialize()');
     return AppInfoData (_packageInfo!);
   }

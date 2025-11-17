@@ -14,6 +14,10 @@ class DatabaseHelper {
 
   factory DatabaseHelper() => _instance;
 
+  static Future<void> initialize() async {
+    await _instance.database; // Просто обращаемся к геттеру
+  }
+
   Future<Database> get database async {
     if(_database != null) return _database!;
       _database = await _initDatabase();
@@ -34,6 +38,7 @@ class DatabaseHelper {
         title TEXT NOT NULL,
         author TEXT,
         bookType TEXT NOT NULL,
+        file_folder_path TEXT NOT NULL,
         file_path TEXT NOT NULL,
         file_format TEXT NOT NULL,
         file_size INTEGER NOT NULL,
@@ -51,18 +56,37 @@ class DatabaseHelper {
     )
     ''');
     await db.execute('''
-      CREATE TABLE chapters(
+    CREATE TABLE chapters(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      start_page INTEGER NOT NULL,
+      end_page INTEGER,
+      current_page INTEGER DEFAULT 0,
+      is_read INTEGER DEFAULT 0,
+      read_time INTEGER,
+      position INTEGER DEFAULT 0,
+      FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+    )
+  ''');
+    await db.execute('''
+      CREATE INDEX idx_chapters_book_id ON chapters(book_id)
+  ''');
+    await db.execute('''
+      CREATE TABLE book_view_settings(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        book_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        start_page INTEGER NOT NULL,
-        end_page INTEGER,
-        current_page INTEGER DEFAULT 0,
-        is_read INTEGER DEFAULT 0,
-        read_time INTEGER,
-        FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+        font_size REAL NOT NULL DEFAULT 16.0,
+        line_height REAL NOT NULL DEFAULT 1.5,
+        background_color INTEGER NOT NULL DEFAULT 4294967295,
+        text_color INTEGER NOT NULL DEFAULT 4278190080
       )
     ''');
+    await db.insert('book_view_settings', {
+      'font_size': 16.0,
+      'line_height': 1.5,
+      'background_color': 0xFFFFFFFF, // белый
+      'text_color': 0xFF000000, // черный
+    });
   }
 
   Future<void> exportEverythingToDownloads() async {
