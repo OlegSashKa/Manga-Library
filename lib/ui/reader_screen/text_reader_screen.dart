@@ -1,12 +1,10 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/book_view_table.dart';
-import 'package:mangalibrary/core/database/tables/books_table.dart';
-import 'package:mangalibrary/core/services/page_calculator_service.dart';
+import 'package:mangalibrary/core/utils/page_manager.dart';
 import 'package:mangalibrary/domain/models/book.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
-import 'package:mangalibrary/enums/book_enums.dart';
+import 'package:mangalibrary/ui/reader_screen/text_page_widget.dart';
 
 class TextReaderScreen extends StatefulWidget {
   final Book book;
@@ -24,113 +22,23 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   String _textContent = '';
   bool _isLoading = true;
   bool _hasError = false;
-  bool _settingsLoaded = false; // ← ДОБАВЛЯЕМ ФЛАГ
-  BooksTable booksTable = BooksTable();
-  bool _pageRestored = false;
-  bool _initialPageSet = false;
+  // bool _settingsLoaded = false; // ← ДОБАВЛЯЕМ ФЛА
+  PageManager? _pageManager;
+  bool _showAppBar = false;
 
   PageController? _pageController;
 
   BookView _bookView = BookView.defaultSettings();
-  List<String> _pages = [];
-  int _currentPageIndex = 0;
 
-  Widget _buildSizeIndicator() {
-    final mediaQuery = MediaQuery.of(context);
-    const double horizontalPadding = 16.0;
-    const double verticalPadding = 16.0;
-
-    final double availableHeight = mediaQuery.size.height
-        - mediaQuery.padding.top
-        - kToolbarHeight
-        - mediaQuery.padding.bottom
-        - (verticalPadding * 2);
-
-    final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
-
-    return Positioned(
-      bottom: 20,
-      right: 20,
-      child: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('📐 РАЗМЕРЫ:', style: TextStyle(color: Colors.white, fontSize: 12)),
-            Text('Высота: ${availableHeight.toStringAsFixed(0)}px', style: TextStyle(color: Colors.white, fontSize: 10)),
-            Text('Ширина: ${availableWidth.toStringAsFixed(0)}px', style: TextStyle(color: Colors.white, fontSize: 10)),
-            Text('Строка: ${(_bookView.fontSize * _bookView.lineHeight).toStringAsFixed(1)}px', style: TextStyle(color: Colors.white, fontSize: 10)),
-            Text('Строк/стр: ${(availableHeight / (_bookView.fontSize * _bookView.lineHeight)).floor()}', style: TextStyle(color: Colors.white, fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _calculatePages() {
-    if (_textContent.isEmpty) return;
-
-    print('🔍 [CALCULATE_PAGES] Начало разбивки на страницы');
-    // Получаем размеры экрана
-    final mediaQuery = MediaQuery.of(context);
-
-    const double horizontalPadding = 16.0;
-    const double verticalPadding = 16.0;
-
-    final double availableHeight = mediaQuery.size.height
-        - mediaQuery.padding.top
-        - kToolbarHeight
-        - mediaQuery.padding.bottom
-        - (verticalPadding * 2);
-
-    final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
-
-    final pages = PageCalculatorService.splitTextIntoPages(
-      text: _textContent,
-      pageWidth: availableWidth,
-      pageHeight: availableHeight,
-      fontSize: _bookView.fontSize,
-      lineHeight: _bookView.lineHeight,
-      fontFamily: 'Roboto',
-    );
-
-    print('📄 Разбито на страниц: ${pages.length}');
-
+  void _toggleAppBar() {
     setState(() {
-      _pages = pages;
-    });
-    print('🔍 [CALCULATE_PAGES] Разбито на ${pages.length} страниц');
-  }
-
-  void _initializePageController(int initialPage) {
-    if (_pageController != null) {
-      if (mounted) {
-        _pageController!.jumpToPage(initialPage);
-      }
-      return;
-    }
-
-    print('🔍 [INIT_CONTROLLER] Создаем контроллер со страницей: $initialPage');
-    setState(() {
-      _pageController = PageController(initialPage: initialPage);
-      _currentPageIndex = initialPage;
-      _pageRestored = true;
-      _initialPageSet = true;
+      _showAppBar = !_showAppBar;
     });
   }
 
   @override
   void initState() {
     super.initState();
-    _initializeReader();
-  }
-
-  void _initializeReader() {
-
     _loadSettings().then((_) {
       _loadBookContent();
     });
@@ -141,21 +49,13 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       final settings = await BookViewTable.getSettings();
       setState(() {
         _bookView = settings;
-        _settingsLoaded = true; // ← ОТМЕЧАЕМ ЧТО НАСТРОЙКИ ЗАГРУЖЕНЫ
+        // _settingsLoaded = true; // ← ОТМЕЧАЕМ ЧТО НАСТРОЙКИ ЗАГРУЖЕНЫ
       });
     }catch(e){
       print('Ошибка загрузки настроек: $e');
       setState(() {
-        _settingsLoaded = true; // ← ВСЕ РАВНО ОТМЕЧАЕМ КАК ЗАГРУЖЕННЫЕ
+        // _settingsLoaded = true; // ← ВСЕ РАВНО ОТМЕЧАЕМ КАК ЗАГРУЖЕННЫЕ
       });
-    }
-  }
-
-  Future<void> _saveSettings() async {
-    try {
-      await BookViewTable.updateSettings(_bookView);
-    } catch (e) {
-      print('Ошибка сохранения настроек: $e');
     }
   }
 
@@ -171,7 +71,6 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       final file = File(widget.book.filePath);
 
       if (await file.exists()) {
-
         final content = await file.readAsString();
 
         if (!mounted) return;
@@ -181,12 +80,9 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
           _isLoading = false;
         });
 
-        _calculatePages();
-
-        if (mounted && !_pageRestored) {
-          await _restoreLastPage();
-          _pageRestored = true;
-        }
+        // 🔥 СОЗДАЕМ PAGE_MANAGER
+        _pageManager = PageManager();
+        _pageManager!.addListener(_onPagesUpdated);
 
       } else {
         if (!mounted) return;
@@ -206,6 +102,13 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     }
   }
 
+  void _onPagesUpdated() {
+    if (!mounted) return;
+    setState(() {
+      // Обновляем UI когда страницы меняются
+    });
+  }
+
   void _changeLineHeight() {
     final double newLineHeight = _bookView.lineHeight <= 1 ? 1 : _bookView.lineHeight - 0.25;
     final updatedBookView = BookView(
@@ -219,9 +122,6 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     setState(() {
       _bookView = updatedBookView;
     });
-
-    // 🔥 ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ ПЕРЕСЧЁТ ВМЕСТО ГЛОБАЛЬНОГО
-    _recalculatePagesWithNewSettings(updatedBookView);
 
     // Сохраняем настройки в базу (без глобального пересчёта)
     BookViewTable.updateSettings(updatedBookView);
@@ -242,9 +142,6 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       _bookView = updatedBookView;
     });
 
-    // 🔥 ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ ПЕРЕСЧЁТ ВМЕСТО ГЛОБАЛЬНОГО
-    _recalculatePagesWithNewSettings(updatedBookView);
-
     // Сохраняем настройки в базу (без глобального пересчёта)
     BookViewTable.updateSettings(updatedBookView);
   }
@@ -252,21 +149,19 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   void _increaseFontSize() {
     final double newFontSize = _bookView.fontSize + 3 >= 32 ? 32 : _bookView.fontSize + 3;
     print("newFontSize " + newFontSize.toString());
+
     final updatedBookView = BookView(
-        id: _bookView.id,
-        fontSize: newFontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
-      );
+      id: _bookView.id,
+      fontSize: newFontSize,
+      lineHeight: _bookView.lineHeight,
+      backgroundColor: _bookView.backgroundColor,
+      textColor: _bookView.textColor,
+    );
 
     // Точечное обновление в базе
     setState(() {
       _bookView = updatedBookView;
     });
-
-    // 🔥 ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ ПЕРЕСЧЁТ ВМЕСТО ГЛОБАЛЬНОГО
-    _recalculatePagesWithNewSettings(updatedBookView);
 
     // Сохраняем настройки в базу (без глобального пересчёта)
     BookViewTable.updateSettings(updatedBookView);
@@ -276,19 +171,16 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     final double newFontSize = _bookView.fontSize - 3 <= 14 ? 14 : _bookView.fontSize - 3;
     print("newFontSize " + newFontSize.toString());
     final updatedBookView = BookView(
-        id: _bookView.id,
-        fontSize: newFontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
-      );
+      id: _bookView.id,
+      fontSize: newFontSize,
+      lineHeight: _bookView.lineHeight,
+      backgroundColor: _bookView.backgroundColor,
+      textColor: _bookView.textColor,
+    );
 
     setState(() {
       _bookView = updatedBookView;
     });
-
-    // 🔥 ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ ПЕРЕСЧЁТ ВМЕСТО ГЛОБАЛЬНОГО
-    _recalculatePagesWithNewSettings(updatedBookView);
 
     // Сохраняем настройки в базу (без глобального пересчёта)
     BookViewTable.updateSettings(updatedBookView);
@@ -302,51 +194,81 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
         ? Colors.black.toARGB32()
         : Colors.white.toARGB32();
 
+    final updatedBookView = BookView(
+      id: _bookView.id,
+      fontSize: _bookView.fontSize,
+      lineHeight: _bookView.lineHeight,
+      backgroundColor: newBackgroundColor,
+      textColor: newTextColor,
+    );
+
     setState(() {
-      _bookView = BookView(
-        id: _bookView.id,
-        fontSize: _bookView.fontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: newBackgroundColor,
-        textColor: newTextColor,
-      );
+      _bookView = updatedBookView;
     });
 
-    // Обновляем оба поля
-    BookViewTable.updateBookViewField(
-        fieldName: 'background_color',
-        value: newBackgroundColor
-    );
-    BookViewTable.updateBookViewField(
-        fieldName: 'text_color',
-        value: newTextColor
-    );
+    BookViewTable.updateSettings(updatedBookView);
   }
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
     Color _backgroundColor = _bookView.getBackgroundColor;
     Color _textColor = _bookView.getTextColor;
+
     return Scaffold(
+
       backgroundColor: _backgroundColor,
-      appBar: AppBar(
+      body: Stack(
+        children: [
+          // Основной контент БЕЗ отступов
+          GestureDetector(
+            onTap: _toggleAppBar,
+            child: Container(
+              color: _backgroundColor,
+              width: double.infinity,
+              height: double.infinity,
+              child: _buildContent(),
+            ),
+          ),
+
+          // AppBar с ограниченной высотой
+          AnimatedOpacity(
+            duration: Duration(milliseconds: 150),
+            opacity: _showAppBar ? 1.0 : 0.0,
+            child: IgnorePointer(
+              ignoring: !_showAppBar,
+              child: Container(
+                height: kToolbarHeight + MediaQuery.of(context).padding.top, // ← ОГРАНИЧИВАЕМ ВЫСОТУ
+                child: _buildAppBar(_backgroundColor, _textColor),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppBar(Color backgroundColor, Color textColor) {
+    return Material(
+      color: backgroundColor == Colors.white ? Colors.white : Colors.black,
+      elevation: 2,
+      child: AppBar(
         title: Text(
           widget.book.title,
           style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 24,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
           ),
           overflow: TextOverflow.ellipsis,
         ),
-        backgroundColor: _backgroundColor == Colors.white
+        backgroundColor: backgroundColor == Colors.white
             ? Colors.white
             : Colors.black,
-        foregroundColor: _textColor,
+        foregroundColor: textColor,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
-            icon: Icon(Icons.settings, color: _textColor),
-            onSelected: (value){
+            icon: Icon(Icons.settings, color: textColor),
+            onSelected: (value) {
               switch (value) {
                 case 'increase_font':
                   _increaseFontSize();
@@ -365,7 +287,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                   break;
               }
             },
-            itemBuilder: (BuildContext context) => {
+            itemBuilder: (BuildContext context) => [
               PopupMenuItem(
                 value: 'increase_font',
                 child: Row(
@@ -390,13 +312,13 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                 value: 'dark_mode',
                 child: Row(
                   children: [
-                    Icon(_backgroundColor == Colors.white
+                    Icon(backgroundColor == Colors.white
                         ? Icons.dark_mode
                         : Icons.light_mode,
                         color: Colors.black
                     ),
                     SizedBox(width: 8),
-                    Text(_backgroundColor == Colors.white
+                    Text(backgroundColor == Colors.white
                         ? 'Темный режим'
                         : 'Светлый режим'),
                   ],
@@ -424,16 +346,16 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                   ],
                 ),
               ),
-            }.toList(),
+            ],
           )
         ],
       ),
-      body: _buildContent(),
     );
   }
 
   Widget _buildContent() {
     Color _textColor = _bookView.getTextColor;
+    Color _backgroundColor = _bookView.getBackgroundColor;
     double _fontSize = _bookView.fontSize;
     double _lineHeight = _bookView.lineHeight;
 
@@ -479,272 +401,210 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       );
     }
 
-    if(_pages.isEmpty){
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SelectableText(
-          _textContent,
-          style: TextStyle(
-            fontSize: _fontSize,
-            height: _lineHeight,
-            color: _textColor,
-          ),
-        ),
-      );
-    } else {
-      return Stack(
-        children: [
-          // ОСНОВНОЕ ИЗМЕНЕНИЕ: проверяем _pageController != null
-          if (_pageController != null)
-            PageView.builder(
-              controller: _pageController!,
-              itemCount: _pages.length,
-              onPageChanged: (int page){
-                setState(() {
-                  _currentPageIndex = page;
-                });
-                print('📖 Переключено на страницу ${page + 1} из ${_pages.length}');
-                _saveReadingProgress(page + 1);
-              },
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SelectableText(
-                    _pages[index],
-                    style: TextStyle(
-                      fontSize: _fontSize,
-                      height: _lineHeight,
-                      color: _textColor,
-                    ),
-                  ),
-                );
-              },
-            )
-          else
-            Center(
-              child: CircularProgressIndicator(),
-            ),
+    // 🔥 ВЫЧИСЛЯЕМ ФИКСИРОВАННЫЙ РАЗМЕР ДЛЯ TEXT_PAGE_WIDGET
+    final mediaQuery = MediaQuery.of(context);
+    final double screenWidth = mediaQuery.size.width;
+    final double screenHeight = mediaQuery.size.height -
+        mediaQuery.padding.top -
+        mediaQuery.padding.bottom;
 
-          // КНОПКИ НАВИГАЦИИ (только когда контроллер готов)
-          if (_pageController != null)
-            Positioned(
-                bottom: 20,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (_currentPageIndex > 0)
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            _pageController!.previousPage(
-                              duration: Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                          },
-                          icon: Icon(Icons.arrow_back),
-                          label: Text('Назад'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black54,
-                          ),
-                        )
-                      else
-                        SizedBox(width: 100),
+    print('📐 [READER] Фиксированный размер для TextPageWidget: ${screenWidth}x${screenHeight}');
 
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration:  BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${_currentPageIndex + 1} / ${_pages.length}',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-
-                      if(_currentPageIndex < _pages.length - 1)
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            _pageController!.nextPage(
-                              duration: Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                          },
-                          icon: Icon(Icons.arrow_forward),
-                          label: Text('Вперед'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black54,
-                          ),
-                        )
-                      else
-                        SizedBox(width: 100),
-                    ],
-                  ),
-                )
-            ),
-        ],
-      );
-    }
+    return Container(
+      padding: EdgeInsets.only(top:24),
+      decoration: BoxDecoration( // ← ДОБАВИЛ ГРАНИЦУ
+        border: Border.all(color: Colors.red, width: 3.0),
+        color: _backgroundColor,
+      ),
+      child: TextPageWidget(
+        text: _textContent,
+        fontSize: _fontSize,
+        lineHeight: _lineHeight,
+        textColor: _textColor,
+        backgroundColor: _backgroundColor,
+        fixedSize: Size(screenWidth, screenHeight), // ← ПЕРЕДАЕМ ФИКСИРОВАННЫЙ РАЗМЕР
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _pageRestored = false;
-    _initialPageSet = false;
     super.dispose();
   }
+  //
+  // void _saveReadingProgress(int currentPage) {
+  //   if (widget.book.id == null) return;
+  //
+  //   final progress = currentPage / _pages.length;
+  //
+  //   BookStatus newStatus;
+  //   if (currentPage == 0) {
+  //     newStatus = BookStatus.planned;
+  //   } else if (currentPage  < _pages.length) {
+  //     newStatus = BookStatus.reading;
+  //   } else {
+  //     newStatus = BookStatus.completed;
+  //   }
+  //
+  //   print('🎨 [READER] Обновление статуса: $newStatus (страница: $currentPage/${_pages.length}, прогресс: ${(progress * 100).toStringAsFixed(1)}%)');
+  //
+  //   booksTable.updateBookField(
+  //     bookId: widget.book.id!,
+  //     fieldName: 'current_page',
+  //     value: currentPage,
+  //   );
+  //
+  //   booksTable.updateBookField(
+  //     bookId: widget.book.id!,
+  //     fieldName: 'progress',
+  //     value: progress,
+  //   );
+  //
+  //   booksTable.updateBookField(
+  //     bookId: widget.book.id!,
+  //     fieldName: 'status',
+  //     value: newStatus.name,
+  //   );
+  //
+  //   if (widget.book.totalPages != _pages.length) {
+  //     booksTable.updateBookField(
+  //       bookId: widget.book.id!,
+  //       fieldName: 'total_pages',
+  //       value: _pages.length,
+  //     );
+  //     print('💾 Обновлено total_pages: ${_pages.length}');
+  //   }
+  //
+  //   print('💾 Прогресс сохранён: страница $currentPage, прогресс ${(progress * 100).toStringAsFixed(1)}%, статус: $newStatus');
+  //
+  //   // 🔥 ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА - убедимся что сохранилось
+  //   Future.delayed(Duration(milliseconds: 300), () async {
+  //     final freshBook = await booksTable.getBookById(widget.book.id!);
+  //     print('🔍 ПРОВЕРКА СОХРАНЕНИЯ: current_page в базе = ${freshBook?.currentPage}');
+  //   });
+  // }
 
-  void _saveReadingProgress(int currentPage) {
-    if (widget.book.id == null) return;
+  // void _recalculatePagesWithNewSettings(BookView newSettings) {
+  //   if (_textContent.isEmpty || !mounted) return;
+  //
+  //   print('🔄 ПЕРЕСЧЁТ СТРАНИЦ С ОБНОВЛЕНИЕМ КЭША...');
+  //   print('   📊 Шрифт: ${newSettings.fontSize}px');
+  //   print('   📏 Интервал: ${newSettings.lineHeight}');
+  //
+  //   final mediaQuery = MediaQuery.of(context);
+  //   const double horizontalPadding = 16.0;
+  //   const double verticalPadding = 16.0;
+  //
+  //   final double availableHeight = mediaQuery.size.height
+  //       - mediaQuery.padding.top
+  //       - kToolbarHeight
+  //       - mediaQuery.padding.bottom
+  //       - (verticalPadding * 2);
+  //
+  //   final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
+  //
+  //   final newPages = PageCalculatorService.splitTextIntoPages(
+  //     text: _textContent,
+  //     pageWidth: availableWidth,
+  //     pageHeight: availableHeight,
+  //     fontSize: newSettings.fontSize,
+  //     lineHeight: newSettings.lineHeight,
+  //     fontFamily: 'Roboto',
+  //   );
+  //
+  //   BookCacheService().updateCachedPages(widget.book.id!, newPages);
+  //
+  //   if (widget.book.id != null) {
+  //     booksTable.updateBookField(
+  //       bookId: widget.book.id!,
+  //       fieldName: 'total_pages',
+  //       value: newPages.length,
+  //     );
+  //     print('💾 Обновлено total_pages: ${newPages.length}');
+  //   }
 
-    final progress = currentPage / _pages.length;
+    // int newCurrentPage = _findPageByAnchor(newPages, _pageAnchor, _currentPageIndex, _pages.length, newPages.length);
 
-    BookStatus newStatus;
-    if (currentPage == 0) {
-      newStatus = BookStatus.planned;
-    } else if (currentPage  < _pages.length) {
-      newStatus = BookStatus.reading;
-    } else {
-      newStatus = BookStatus.completed;
-    }
+    // setState(() {
+    //   _pages = newPages;
+    //   _currentPageIndex = newCurrentPage;
+    // });
 
-    print('🎨 [READER] Обновление статуса: $newStatus (страница: $currentPage/${_pages.length}, прогресс: ${(progress * 100).toStringAsFixed(1)}%)');
+    // if (mounted && _pageController != null) {
+    //   _isProgrammaticNavigation = true;
+    //   _pageController!.jumpToPage(_currentPageIndex);
+    //   _isProgrammaticNavigation = false;
+    // }
 
-    booksTable.updateBookField(
-      bookId: widget.book.id!,
-      fieldName: 'current_page',
-      value: currentPage,
-    );
+    // BookViewTable.updateSettings(newSettings);
 
-    booksTable.updateBookField(
-      bookId: widget.book.id!,
-      fieldName: 'progress',
-      value: progress,
-    );
+    // _saveReadingProgress(_currentPageIndex + 1);
 
-    booksTable.updateBookField(
-      bookId: widget.book.id!,
-      fieldName: 'status',
-      value: newStatus.name,
-    );
+    // print('✅ Страницы пересчитаны: ${_pages.length} страниц');
+    // print('   📍 Новая позиция: ${_currentPageIndex + 1} из ${_pages.length}');
 
-    if (widget.book.totalPages != _pages.length) {
-      booksTable.updateBookField(
-        bookId: widget.book.id!,
-        fieldName: 'total_pages',
-        value: _pages.length,
-      );
-      print('💾 Обновлено total_pages: ${_pages.length}');
-    }
+    // AppGlobals.showSuccess('Страницы пересчитаны (${_pages.length} стр.)');
+  // }
 
-    print('💾 Прогресс сохранён: страница $currentPage, прогресс ${(progress * 100).toStringAsFixed(1)}%, статус: $newStatus');
+  // Future<void> _restoreLastPage() async {
+  //   try {
+  //     print('🔍 [RESTORE_START] Начало восстановления страницы');
+  //
+  //     if (!mounted || _pageRestored || _pages.isEmpty || widget.book.id == null) {
+  //       // Если не нужно восстанавливать, создаем контроллер с 0 страницей
+  //       _initializePageController(0);
+  //       return;
+  //     }
+  //
+  //     final booksTable = BooksTable();
+  //     final freshBook = await booksTable.getBookById(widget.book.id!);
+  //
+  //     if (freshBook != null && mounted) {
+  //       final lastPage = freshBook.currentPage;
+  //       final pageIndex = (lastPage - 1).clamp(0, _pages.length - 1);
+  //
+  //       print('🔍 [RESTORE_JUMP] Создаем контроллер со страницей: $pageIndex');
+  //       _initializePageController(pageIndex);
+  //       if (pageIndex + 1 != freshBook.currentPage || freshBook.totalPages != _pages.length) {
+  //         print('💾 [RESTORE] Сохраняем актуальный прогресс при открытии');
+  //         _saveReadingProgress(pageIndex + 1);
+  //       }
+  //     } else {
+  //       _initializePageController(0);
+  //     }
+  //   } catch (e) {
+  //     print('⚠️ [RESTORE_ERROR] Ошибка восстановления: $e');
+  //     _initializePageController(0);
+  //   }
+  // }
 
-    // 🔥 ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА - убедимся что сохранилось
-    Future.delayed(Duration(milliseconds: 300), () async {
-      final freshBook = await booksTable.getBookById(widget.book.id!);
-      print('🔍 ПРОВЕРКА СОХРАНЕНИЯ: current_page в базе = ${freshBook?.currentPage}');
-    });
-  }
-
-  void _recalculatePagesWithNewSettings(BookView newSettings) {
-    if (_textContent.isEmpty || !mounted) return;
-
-    print('🔄 ПЕРЕСЧЁТ СТРАНИЦ С НОВЫМИ НАСТРОЙКАМИ...');
-    print('   📊 Шрифт: ${newSettings.fontSize}px');
-    print('   📏 Интервал: ${newSettings.lineHeight}');
-
-    final mediaQuery = MediaQuery.of(context);
-    const double horizontalPadding = 16.0;
-    const double verticalPadding = 16.0;
-
-    final double availableHeight = mediaQuery.size.height
-        - mediaQuery.padding.top
-        - kToolbarHeight
-        - mediaQuery.padding.bottom
-        - (verticalPadding * 2);
-
-    final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
-
-    final newPages = PageCalculatorService.splitTextIntoPages(
-      text: _textContent,
-      pageWidth: availableWidth,
-      pageHeight: availableHeight,
-      fontSize: newSettings.fontSize,
-      lineHeight: newSettings.lineHeight,
-      fontFamily: 'Roboto',
-    );
-
-    if (widget.book.id != null) {
-      booksTable.updateBookField(
-        bookId: widget.book.id!,
-        fieldName: 'total_pages',
-        value: newPages.length,
-      );
-      print('💾 Обновлено total_pages: ${newPages.length}');
-    }
-
-    final oldProgress = _currentPageIndex / _pages.length;
-    final newCurrentPage = (oldProgress * newPages.length).floor().clamp(0, newPages.length - 1);
-
-    setState(() {
-      _pages = newPages;
-      _currentPageIndex = newCurrentPage;
-    });
-
-    if (mounted && _pageController != null) {
-      _pageController!.jumpToPage(_currentPageIndex);
-    }
-
-    BookViewTable.updateSettings(newSettings);
-
-    _saveReadingProgress(_currentPageIndex + 1);
-
-    print('✅ Страницы пересчитаны: ${_pages.length} страниц');
-    print('   📍 Новая позиция: ${_currentPageIndex + 1} из ${_pages.length}');
-
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Страницы пересчитаны (${_pages.length} стр.)'),
-          duration: Duration(seconds: 2),
-        )
-    );
-  }
-
-  Future<void> _restoreLastPage() async {
-    try {
-      print('🔍 [RESTORE_START] Начало восстановления страницы');
-
-      if (!mounted || _pageRestored || _pages.isEmpty || widget.book.id == null) {
-        // Если не нужно восстанавливать, создаем контроллер с 0 страницей
-        _initializePageController(0);
-        return;
-      }
-
-      final booksTable = BooksTable();
-      final freshBook = await booksTable.getBookById(widget.book.id!);
-
-      if (freshBook != null && mounted) {
-        final lastPage = freshBook.currentPage;
-        final pageIndex = (lastPage - 1).clamp(0, _pages.length - 1);
-
-        print('🔍 [RESTORE_JUMP] Создаем контроллер со страницей: $pageIndex');
-        _initializePageController(pageIndex);
-        if (pageIndex + 1 != freshBook.currentPage || freshBook.totalPages != _pages.length) {
-          print('💾 [RESTORE] Сохраняем актуальный прогресс при открытии');
-          _saveReadingProgress(pageIndex + 1);
-        }
-      } else {
-        _initializePageController(0);
-      }
-    } catch (e) {
-      print('⚠️ [RESTORE_ERROR] Ошибка восстановления: $e');
-      _initializePageController(0);
-    }
-  }
+  // int _findPageByAnchor(List<String> newPages, String anchor, int oldCurrentPage, int oldTotalPages, int newTotalPages) {
+  //   if (anchor.isEmpty) {
+  //     // 🔥 Если якоря нет, используем старую логику с процентами
+  //     print('Используем старую логику с процентами');
+  //     final oldProgress = oldCurrentPage / oldTotalPages;
+  //     return (oldProgress * newTotalPages).floor().clamp(0, newTotalPages - 1);
+  //   }
+  //   print('🔍 Поиск якоря: "$anchor"');
+  //   final approximatePage = ((oldCurrentPage / oldTotalPages) * newTotalPages).floor();
+  //   final startPage = max(0, approximatePage - 1);
+  //   final endPage = min(newTotalPages - 1, approximatePage + 1);
+  //   print('   📍 Примерная позиция: $approximatePage, диапазон поиска: $startPage-$endPage');
+  //
+  //   for (int i = startPage; i <= endPage; i++) {
+  //     if (newPages[i].contains(anchor)) {
+  //       print('   ✅ Якорь найден на странице: $i');
+  //       return i;
+  //     }
+  //   }
+  //
+  //   for (int i = 0; i < newPages.length; i++) {
+  //     if (newPages[i].contains(anchor)) {
+  //       print('   🔎 Якорь найден в другом месте: $i');
+  //       return i;
+  //     }
+  //   }
+  //   print('   ❌ Якорь не найден, используем процентную логику');
+  //   return approximatePage.clamp(0, newTotalPages - 1);
+  // }
 }

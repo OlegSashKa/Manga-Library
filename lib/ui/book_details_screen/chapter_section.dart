@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/chapters_table.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/domain/models/book.dart';
 
 class ChapterSection extends StatefulWidget{
@@ -204,12 +205,7 @@ class _ChapterSectionState extends State<ChapterSection> {
     // Например: Navigator.push(...) к экрану чтения с указанием главы
 
     // Можно показать временное уведомление
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Открываем главу: ${chapter.title}'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    AppGlobals.showInfo('Открываем главу: ${chapter.title}');
   }
   void updateChapters(List<BookChapter> newChapters) {
     setState(() {

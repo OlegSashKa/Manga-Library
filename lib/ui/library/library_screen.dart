@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
 import 'package:mangalibrary/core/utils/book_page_updater.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
@@ -732,7 +733,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         builder: (context) => BookDetailsScreen(
           book: book,
           onDelete: () {
-            _deleteBook(book);
+            AppGlobals.showInfo('Книга "${book.title}" удалена');
           },
         ),
       ),
@@ -772,12 +773,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       }
     });
     _loadLibraryData(); // Перезагружаем данные для гарантии
-  }
-
-  void _deleteBook(Book book) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Книга "${book.title}" удалена')),
-    );
   }
 
   void _addNewBook() async {
@@ -1026,21 +1021,15 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                                     });
                                   }
                               );
+
+                              _loadLibraryData();
+
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Пересчёт страниц завершён!'))
-                              );
+                              AppGlobals.showSuccess('Пересчёт страниц завершён!');
                             } catch (e) {
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Ошибка пересчёта: $e'), backgroundColor: Colors.red)
-                              );
+                              AppGlobals.showError('Ошибка пересчёта: $e');
                             }
-
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Пересчёт страниц завершён!'))
-                            );
                           },
                           label: Text('Пересичитать все страницы книг'),
                           style: ElevatedButton.styleFrom(
@@ -1140,24 +1129,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     int newBookId = await _booksTable.insertBook(newBook);
     newBook.id = newBookId;
     _loadLibraryData();
-    // try{
-    //
-    //
-    //   ScaffoldMessenger.of(context).showSnackBar(
-    //     SnackBar(
-    //         content: Text('Книга "${newBook.title}" успешно добавлена!'),
-    //       backgroundColor: Colors.green,
-    //     ),
-    //   );
-    // }catch (e){
-    //   print('Ошибка сохранения книги: $e');
-    //   ScaffoldMessenger.of(context).showSnackBar(
-    //       SnackBar(
-    //         content: Text('Ошибка при добавлении книги: $e'),
-    //         backgroundColor: Colors.red,
-    //       )
-    //   );
-    // }
   }
 
   Future<void> _exportDataBase() async {
@@ -1178,12 +1149,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         _exportStatus = '✅ Вся библиотека экспортирована в папку Download/MangaLibrary_Books/';
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Библиотека экспортирована!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      AppGlobals.showSuccess('Библиотека экспортирована!');
 
     } catch (e) {
       print('=== ОШИБКА ЭКСПОРТА: $e ===');
@@ -1191,26 +1157,13 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         _exportStatus = '❌ Ошибка: $e';
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка экспорта: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppGlobals.showError('Ошибка экспорта: $e');
     } finally {
       setState(() {
         _isExporting = false;
       });
       print('=== ЗАВЕРШЕНИЕ ЭКСПОРТА ===');
     }
-  }
-
-  /// Вспомогательный метод для форматирования размера файла
-  /// Преобразует байты в читаемый формат (КБ, МБ)
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes Б';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} КБ';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
   }
 
 }

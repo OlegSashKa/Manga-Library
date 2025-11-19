@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
+import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/chapter_section.dart';
@@ -284,9 +286,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
     } else if (book.bookType == BookType.manga) {
       // Для манги оставляем старый функционал
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Открытие манги еще не реализованно')),
-      );
+      AppGlobals.showInfo('Открытие манги еще не реализованно');
     }
   }
 
@@ -353,22 +353,57 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           ),
           content: SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 DefaultTextStyle(
-                  style: TextStyle( fontSize: 16, color: Colors.grey[800], fontFamily: 'sans-serif'),
+                  style: TextStyle(fontSize: 16, color: Colors.grey[800], fontFamily: 'sans-serif'),
+                  textAlign: TextAlign.left,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Название: ${book.title}'),
-                      Text('Автор: ${book.author}'),
+                      Container(
+                        width: double.infinity,
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.start,
+                          alignment: WrapAlignment.start, // ← ВЫРАВНИВАНИЕ ПО ЛЕВОМУ КРАЮ
+                          runAlignment: WrapAlignment.start, // ← ВЫРАВНИВАНИЕ СТРОК
+                          children: [
+                            Text('Название: '),
+                            Text(
+                              book.title,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                              softWrap: true,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: double.infinity,
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.start,
+                          alignment: WrapAlignment.start, // ← ВЫРАВНИВАНИЕ ПО ЛЕВОМУ КРАЮ
+                          runAlignment: WrapAlignment.start, // ← ВЫРАВНИВАНИЕ СТРОК
+                          children: [
+                            Text('Автор: '),
+                            Text(
+                              book.author,
+                              softWrap: true,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
                       Text('Тип: ${book.bookType.name}'),
                       Text('Формат: ${book.fileFormat}'),
-                      Text('Размер: ${(book.fileSize / 1024 / 1024).toStringAsFixed(2)}MB'),
+                      Text('Размер: ${AppUtils.formatFileSize(book.fileSize)}'),
                       Text('Страниц: ${book.totalPages}'),
                       Text('Добавлена: ${book.addedDate.day}.${book.addedDate.month}.${book.addedDate.year}'),
                       Text('Последнее открытие: ${book.lastDateOpen.day}.${book.lastDateOpen.month}.${book.lastDateOpen.year}'),
-                      Text('Время чтения:  ${book.readingTime.inMinutes}мин'),
+                      Text('Время чтения:  ${AppUtils.formatDuration(book.readingTime)}'),
                     ],
                   ),
                 ),
@@ -385,8 +420,6 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           ],
         )
     );
-
-
   }
 
   Future<void> _deleteBookCompletely(BuildContext context, Book book) async {
@@ -404,11 +437,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
     }catch(e){
       print('Ошибка при удалении книги: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при удалении книги: $e')),
-      );
+      AppGlobals.showError('Ошибка при удалении книги: $e');
     }
-
   }
 
   Future<void> _deleteBookFiles(Book book) async {

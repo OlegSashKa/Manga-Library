@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:mangalibrary/core/database/tables/book_view_table.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
+import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
 import 'package:mangalibrary/core/services/page_calculator_service.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
+import 'package:mangalibrary/ui/add_book_dialog/tag_input_widget.dart';
 import 'package:path/path.dart' as path;
 import 'package:mangalibrary/domain/models/book.dart';
 
@@ -26,7 +29,7 @@ class AddBookDialog extends StatefulWidget {
 class _AddBookDialogState extends State<AddBookDialog> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _authorController = TextEditingController();
-  final _tagsController = TextEditingController(); // Контроллер для тегов
+  final _tagInputController = TextEditingController();
 
   String? _selectedFilePath;
   String? _fileName;
@@ -57,12 +60,30 @@ class _AddBookDialogState extends State<AddBookDialog> {
   @override
   Widget build(BuildContext context){
     return AlertDialog(
-      title: Row(
-        children: [
-          // Icon(Icons.add_circle, color: Colors.deepPurple),
-          SizedBox(width: 8),
-          Text('Добавить книгу')
-        ],
+      constraints: BoxConstraints(
+        minWidth: 300,
+        maxWidth: 380,
+      ),
+      shape: RoundedRectangleBorder( // ← ДОБАВЛЯЕМ ФОРМУ
+        borderRadius: BorderRadius.circular(12), // ← ОДИНАКОВОЕ СКРУГЛЕНИЕ ВСЕХ УГЛОВ
+      ),
+      titlePadding: EdgeInsets.zero, // ← УБИРАЕМ ОТСТУПЫ У ЗАГОЛОВКА
+      insetPadding: EdgeInsets.zero,
+      title: Container(
+        padding: EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.deepPurple[100],
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Text(
+          'Добавить книгу',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.deepPurple[900],
+          ),
+        ),
       ),
       content: SingleChildScrollView(
         child: Column(
@@ -78,7 +99,11 @@ class _AddBookDialogState extends State<AddBookDialog> {
                 prefixIcon: Icon(Icons.title),
               ),
             ),
-            SizedBox(height: 16),
+            Text(
+              '* - обязательное поле',
+              style: TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+            SizedBox(height: 3),
             // Поле для автора
             TextField(
               controller: _authorController,
@@ -89,48 +114,16 @@ class _AddBookDialogState extends State<AddBookDialog> {
               ),
             ),
             SizedBox(height: 16),
-            // Поле тегов
-            TextFormField(
-              controller: _tagsController,
-              decoration: InputDecoration(
-                labelText: 'Теги (через запятую)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.tag),
-                hintText: 'фэнтези, приключения, роман',
-              ),
-              onChanged: (value) {
+            TagInputWidget(
+              initialTags: _tags,
+              onTagsChanged: (newTags) {
                 setState(() {
-                  // Разделяем строку по запятым, убираем пробелы и пустые элементы
-                  _tags = value.split(',')
-                      .map((tag) => tag.trim())
-                      .where((tag) => tag.isNotEmpty)
-                      .toList();
+                  _tags = newTags;
                 });
-              },
+                },
+              labelText: 'Введите тег',
+              hintText: 'фэнтези, приключения, роман',
             ),
-
-            SizedBox(height: 16),
-            if (_tags.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: _tags.map((tag) {
-                  return Chip(
-                    label: Text(tag),
-                    backgroundColor: Colors.blue[50],
-                    deleteIcon: Icon(Icons.close, size: 16),
-                    onDeleted: () {
-                      setState(() {
-                        _tags.remove(tag);
-                        _tagsController.text = _tags.join(', ');
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-
             SizedBox(height: 16),
             // Кнопка выбора файла
             Container(
@@ -169,7 +162,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
                           if(_fileSize != null) ...[
                             SizedBox(width: 4),
                             Text(
-                              'Размер: ${(_fileSize! / 1024 / 1024).toStringAsFixed(2)} MB',
+                              'Размер: ${AppUtils.formatFileSize(_fileSize!)}',
                               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                             ),
                           ],
@@ -181,10 +174,6 @@ class _AddBookDialogState extends State<AddBookDialog> {
               ),
               SizedBox(height: 8),
             ],
-            Text(
-              '* - обязательные поля',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
           ],
         ),
       ),
@@ -230,13 +219,13 @@ class _AddBookDialogState extends State<AddBookDialog> {
       final file = result.files.single; // Получаем первый файл
 
       if (file.path == null || file.path!.isEmpty) {
-        _showError('Не удалось получить путь к файлу');
+        AppGlobals.showError('Не удалось получить путь к файлу');
         return;
       }
 
       final fileObject = File(file.path!);
       if (!await fileObject.exists()) {
-        _showError('Файл не существует или недоступен');
+        AppGlobals.showError('Файл не существует или недоступен');
         return;
       }
 
@@ -258,7 +247,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
 
     } catch (e){
       print('Ошибка выбора файла: $e');
-      _showError('Не удалось выбрать файл');
+      AppGlobals.showError('Не удалось выбрать файл');
     }
   }
 
@@ -285,15 +274,6 @@ class _AddBookDialogState extends State<AddBookDialog> {
     setState(() {});
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
   bool _canSave() {
     return _titleController.text.isNotEmpty &&
         _selectedFilePath != null;
@@ -302,12 +282,12 @@ class _AddBookDialogState extends State<AddBookDialog> {
   void _saveBook() async {
     // Показываем индикатор загрузки
     if (_selectedFilePath == null || _selectedFilePath!.isEmpty) {
-      _showError('Файл не выбран');
+      AppGlobals.showError('Файл не выбран');
       return;
     }
 
     if (_titleController.text.isEmpty) {
-      _showError('Введите название книги');
+      AppGlobals.showError('Введите название книги');
       return;
     }
 
@@ -325,7 +305,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
       bool bookExists = await booksTable.doesBookExist(_titleController.text);
       if (bookExists) {
         Navigator.pop(context); // Закрываем индикатор
-        _showError('Книга с названием "${_titleController.text}" уже существует в библиотеке');
+        AppGlobals.showError('Книга с названием "${_titleController.text}" уже существует в библиотеке');
         return;
       }
 
@@ -343,15 +323,27 @@ class _AddBookDialogState extends State<AddBookDialog> {
           if (await file.exists()) {
             final content = await file.readAsString();
 
-            final screenSize = MediaQuery.of(context).size;
+            final mediaQuery = MediaQuery.of(context);
+            const double horizontalPadding = 16.0;
+            const double verticalPadding = 16.0;
+
+            final double availableHeight = mediaQuery.size.height
+                - mediaQuery.padding.top
+                - kToolbarHeight
+                - mediaQuery.padding.bottom
+                - (verticalPadding * 2);
+
+            final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
+
             totalPages = PageCalculatorService.calculatePageCount(
               text: content,
-              pageWidth: screenSize.width - 32,
-              pageHeight: screenSize.height - 200,
+              pageWidth: availableWidth,
+              pageHeight: availableHeight,
               fontSize: bookViewSettings.fontSize,
               lineHeight: bookViewSettings.lineHeight,
               horizontalPadding: 16.0,
               verticalPadding: 16.0,
+              fontFamily: 'Roboto',
             );
 
             print('📖 Для книги "${_titleController.text}" рассчитано страниц: $totalPages');
@@ -397,12 +389,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
 
       Navigator.pop(context);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Книга "${newBook.title}" успешно добавлена!'),
-            backgroundColor: Colors.green,
-          )
-      );
+      AppGlobals.showSuccess('Книга "${newBook.title}" успешно добавлена!');
 
       widget.onBookAdded(newBook);
       Navigator.pop(context);
@@ -411,7 +398,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
       Navigator.pop(context); // Закрываем индикатор
       print('❌ КРИТИЧЕСКАЯ ОШИБКА: $e');
       print('📋 Stack trace: $stackTrace');
-      _showError('Ошибка: ${e.toString()}');
+      AppGlobals.showError('Ошибка: ${e.toString()}');
     }
   }
 }

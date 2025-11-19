@@ -2,6 +2,7 @@ import 'package:downloadsfolder/downloadsfolder.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/utils/book_page_updater.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:sqflite/sqflite.dart';
@@ -63,28 +64,15 @@ class BookViewTable{
   static Future<void> updateSettingsWithPageRecalculation(BookView bookView, BuildContext context) async {
     await updateSettings(bookView);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Настройки сохранены. Начинается пересчёт страниц...'),
-          duration: Duration(seconds: 1),
-        )
-    );
+    AppGlobals.showInfo('Настройки сохранены. Начинается пересчёт страниц...');
 
     Future.delayed(Duration(seconds: 1), (){
       BookPageUpdater.recalculateAllBooksPages(context, null).then((_){
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Пересчёт страниц завершён!'),
-              backgroundColor: Colors.green,
-            )
-        );
+
+        AppGlobals.showSuccess('Пересчёт страниц завершён!');
+
       }).catchError((e){
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка пересчёта страниц: $e'),
-              backgroundColor: Colors.red,
-            )
-        );
+        AppGlobals.showError('Ошибка пересчёта страниц: $e');
       });
     });
   }

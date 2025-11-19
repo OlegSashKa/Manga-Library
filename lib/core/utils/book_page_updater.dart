@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/database/tables/book_view_table.dart';
+import 'package:mangalibrary/core/services/book_cache_service.dart';
 import 'package:mangalibrary/domain/models/book.dart';
 import 'package:mangalibrary/core/services/page_calculator_service.dart';
 import 'dart:io';
@@ -9,6 +10,10 @@ class BookPageUpdater {
   static Future<void> recalculateAllBooksPages(BuildContext context, Function(int current, int total)? onProgress,) async {
     try{
       print('🔄 НАЧИНАЕМ ПЕРЕСЧЁТ СТРАНИЦ ДЛЯ ВСЕХ КНИГ...');
+
+
+      BookCacheService().clearCache();
+      print('🗑️ Кэш очищен перед пересчётом всех книг');
 
       final booksTable = BooksTable();
       final allBooks = await booksTable.getAllBooks();
@@ -22,17 +27,16 @@ class BookPageUpdater {
       int processedCount = 0;
 
       final mediaQuery = MediaQuery.of(context);
-      final appBarHeight = kToolbarHeight; // стандартная высота AppBar
-      final statusBarHeight = mediaQuery.padding.top;
-      final bottomPadding = mediaQuery.padding.bottom;
+      const double horizontalPadding = 16.0;
+      const double verticalPadding = 16.0;
 
       final double availableHeight = mediaQuery.size.height
-          - statusBarHeight
-          - appBarHeight
-          - bottomPadding
-          - 32;
+          - mediaQuery.padding.top
+          - kToolbarHeight
+          - mediaQuery.padding.bottom
+          - (verticalPadding * 2);
 
-      final double availableWidth = mediaQuery.size.width - 32;
+      final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
 
       for(Book book in allBooks){
 
@@ -44,7 +48,7 @@ class BookPageUpdater {
           try{
             final content = await  File(book.filePath).readAsString();
 
-            final newTotalPages = PageCalculatorService.calculatePageCount(
+            final newTotalPages  = PageCalculatorService.calculatePageCount(
               text: content,
               pageWidth: availableWidth,
               pageHeight: availableHeight,
@@ -54,7 +58,8 @@ class BookPageUpdater {
               verticalPadding: 16.0,
               fontFamily: 'Roboto',
             );
-            // Обновляем только если количество страниц изменилось
+
+            // Обновляем тольк  о если количество страниц изменилось
             if (newTotalPages != book.totalPages) {
               await booksTable.updateBookField(
                 bookId: book.id!,

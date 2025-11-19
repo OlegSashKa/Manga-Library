@@ -1,4 +1,5 @@
 import 'package:mangalibrary/core/database/database_helper.dart';
+import 'package:mangalibrary/core/services/book_cache_service.dart';
 import 'package:mangalibrary/core/services/chapter_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
@@ -134,6 +135,10 @@ class BooksTable{
 
   Future<int> deleteBook(int id) async {
     final db = await dbHelper.database;
+
+    BookCacheService().removeFromCache(id);
+    print('🧹 Книга ID: $id удалена из кэша');
+
     return await db.delete(
         'books',
         where: 'id = ?',

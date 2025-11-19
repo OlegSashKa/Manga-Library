@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:provider/provider.dart';
@@ -12,12 +13,12 @@ void main() async {
 
   await AppInfoService.instance.initialize();
 
+
   runApp(MangaLibraryApp());
 }
 
 class MangaLibraryApp extends StatelessWidget {
   const MangaLibraryApp({super.key});
-
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +27,7 @@ class MangaLibraryApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TimeProvider()),
       ],
       child: MaterialApp(
+        scaffoldMessengerKey: AppGlobals.scaffoldMessengerKey,
         title: 'Manga Library',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(

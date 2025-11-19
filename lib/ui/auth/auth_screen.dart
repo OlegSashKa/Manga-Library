@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mangalibrary/core/services/app_globals.dart';
 import '../library/library_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -166,12 +167,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final password = _passwordController.text.trim();
 
     if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Заполните все поля'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppGlobals.showError('Заполните все поля');
       return;
     }
 
