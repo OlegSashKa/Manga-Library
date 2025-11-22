@@ -6,7 +6,6 @@ import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
-import 'package:mangalibrary/core/services/page_calculator_service.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/add_book_dialog/tag_input_widget.dart';
@@ -334,17 +333,6 @@ class _AddBookDialogState extends State<AddBookDialog> {
                 - (verticalPadding * 2);
 
             final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
-
-            totalPages = PageCalculatorService.calculatePageCount(
-              text: content,
-              pageWidth: availableWidth,
-              pageHeight: availableHeight,
-              fontSize: bookViewSettings.fontSize,
-              lineHeight: bookViewSettings.lineHeight,
-              horizontalPadding: 16.0,
-              verticalPadding: 16.0,
-              fontFamily: 'Roboto',
-            );
 
             print('📖 Для книги "${_titleController.text}" рассчитано страниц: $totalPages');
             print('Использованы настройки: шрифт ${bookViewSettings.fontSize}, интервал ${bookViewSettings.lineHeight}');

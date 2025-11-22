@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
-import 'package:mangalibrary/core/utils/book_page_updater.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/book_details_screen.dart';
 import 'package:mangalibrary/ui/library/BookTags.dart';
@@ -61,7 +60,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         // ВАЖНО: полностью очищаем список перед добавлением книг из БД
         _bookList.clear();
         _bookList.addAll(booksFromDb);
-        _filteredBookList = _bookList;
+        _filteredBookList = List.from(_bookList);
       });
 
       // УБИРАЕМ добавление тестовой книги если есть книги из БД
@@ -83,7 +82,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     setState(() {
       _bookList.clear();
       _bookList.addAll(MockData.getMockManga());
-      _filteredBookList = _bookList;
+      _filteredBookList = List.from(_bookList);
       print('Добавлено тестовых книг: ${_bookList.length}');
     });
   }
@@ -103,7 +102,9 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
 
   void _startAutoRefresh() {
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      Provider.of<TimeProvider>(context, listen: false).updateTime();
+      if (mounted) {
+        Provider.of<TimeProvider>(context, listen: false).updateTime();
+      }
     });
   }
 
@@ -111,7 +112,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   void _searchManga(String query) {
     setState(() {
       if (query.isEmpty) {
-        _filteredBookList = _bookList;
+        _filteredBookList = List.from(_bookList);
       } else {
         _filteredBookList = _bookList.where((book) {
           return book.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -127,7 +128,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   void _searchSchedule(String query) {
     setState(() {
       if (query.isEmpty) {
-        _filteredScheduleList = _scheduleList;
+        _filteredScheduleList =  List.from(_scheduleList);
       } else {
         _filteredScheduleList = _scheduleList.where((item) {
           return item.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -152,8 +153,8 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       _isSearching = !_isSearching;
       if (!_isSearching) {
         _searchController.clear();
-        _filteredBookList = _bookList;
-        _filteredScheduleList = _scheduleList;
+        _filteredBookList = List.from(_bookList);
+        _filteredScheduleList = List.from(_scheduleList);
       }
     });
   }
@@ -1012,18 +1013,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                               )
                             );
                             try{
-                              await BookPageUpdater.recalculateAllBooksPages(
-                                  context,
-                                      (currentProgress, totalCount) {
-                                    setState(() {
-                                      current = currentProgress;
-                                      total = totalCount;
-                                    });
-                                  }
-                              );
-
                               _loadLibraryData();
-
                               Navigator.pop(context);
                               AppGlobals.showSuccess('Пересчёт страниц завершён!');
                             } catch (e) {
@@ -1165,5 +1155,4 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       print('=== ЗАВЕРШЕНИЕ ЭКСПОРТА ===');
     }
   }
-
 }

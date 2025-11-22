@@ -6,13 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:mangalibrary/ui/library/library_screen.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
 import 'package:mangalibrary/ui/library/time_provider.dart';
-import 'package:mangalibrary/core/services/screen_size_service.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AppInfoService.instance.initialize();
-
 
   runApp(MangaLibraryApp());
 }
@@ -36,38 +33,7 @@ class MangaLibraryApp extends StatelessWidget {
           ),
           useMaterial3: true,
         ),
-        home: FutureBuilder(
-          future: DatabaseHelper.initialize(), // ← ИНИЦИАЛИЗАЦИЯ ЗДЕСЬ
-          builder: (context, snapshot) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              ScreenSizeService.initialize(context);
-            });
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Загрузка...'),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Scaffold(
-                body: Center(
-                  child: Text('Ошибка загрузки: ${snapshot.error}'),
-                ),
-              );
-            }
-
-            return const LibraryScreen();
-          },
-        ),
+        home: const LibraryScreen(),
         debugShowCheckedModeBanner: false,
       ),
     );

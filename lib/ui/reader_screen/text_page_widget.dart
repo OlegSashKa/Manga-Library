@@ -1,24 +1,20 @@
 // text_page_widget.dart - ШАГ 12 (полноэкранный со свайпом)
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:mangalibrary/core/utils/page_manager.dart';
-import 'package:mangalibrary/core/utils/text_paginator.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mangalibrary/core/utils/textPaginator.dart';
+import 'package:mangalibrary/domain/models/book.dart';
+import 'package:mangalibrary/domain/models/bookView.dart';
 
 class TextPageWidget extends StatefulWidget {
-  final String text;
-  final double fontSize;
-  final double lineHeight;
-  final Color textColor;
-  final Color backgroundColor;
-  final Size? fixedSize; // ← НОВЫЙ ПАРАМЕТР
+  final BookView bookView;
+  final Book book;
 
   const TextPageWidget({
     super.key,
-    required this.text,
-    required this.fontSize,
-    required this.lineHeight,
-    required this.textColor,
-    required this.backgroundColor,
-    this.fixedSize, // ← ОПЦИОНАЛЬНЫЙ ФИКСИРОВАННЫЙ РАЗМЕР
+    required this.bookView,
+    required this.book
   });
 
   @override
@@ -26,125 +22,122 @@ class TextPageWidget extends StatefulWidget {
 }
 
 class _TextPageWidgetState extends State<TextPageWidget> {
-  List<String> _pages = [];
-  int _currentPageIndex = 0;
-  bool _isCalculatingPages = false;
-  Size? _lastCalculatedSize;
+  String filePathToBook = "";
+  List<String>? _pages;
+  bool _isInitialized = false;
+
+  TextStyle get textStyle {
+    return TextStyle(
+      fontSize: widget.bookView.fontSize,
+      color: widget.bookView.getTextColor,
+      height: widget.bookView.lineHeight,
+      fontFamily: 'Times New Roman'
+    );
+  }
 
   @override
   void initState() {
     super.initState();
   }
 
-  void _onPagesUpdated() {
-    if (mounted) {
-      setState(() {});
-    }
+  @override
+  void didUpdateWidget(TextPageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
   }
+
 
   @override
   Widget build(BuildContext context) {
-
-    if (widget.fixedSize != null) {
-      print('📐 [TEXT_PAGE] Используем фиксированный размер: ${widget.fixedSize}');
-      return _buildWithFixedSize(widget.fixedSize!);
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        print('🎯 [TEXT_PAGE] LayoutBuilder размер: ${constraints.maxWidth}x${constraints.maxHeight}');
-        return _buildContent(constraints.maxWidth, constraints.maxHeight);
-      },
-    );
-  }
-
-  Widget _buildWithFixedSize(Size fixedSize) {
-    // 🔥 РАСЧЕТ СТРАНИЦ ДЛЯ ФИКСИРОВАННОГО РАЗМЕРА
-    if (!_isCalculatingPages && _pages.isEmpty) {
-      _isCalculatingPages = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _calculatePages(
-          text: widget.text,
-          pageWidth: fixedSize.width,
-          pageHeight: fixedSize.height,
-          fontSize: widget.fontSize,
-          lineHeight: widget.lineHeight,
-        );
-      });
-    }
-
-    return _buildContent(fixedSize.width, fixedSize.height);
-  }
-
-  Widget _buildContent(double width, double height) {
     return Container(
-      decoration: BoxDecoration( // ← ДОБАВИЛ ГРАНИЦУ
-        border: Border.all(color: Colors.blue, width: 3.0),
-        color: widget.backgroundColor,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.red, width: 3.0),
       ),
-      width: width,
-      height: height,
-      child: _pages.isNotEmpty
-          ? PageView.builder(
-        itemCount: _pages.length,
-        onPageChanged: (int page) {
-          setState(() {
-            _currentPageIndex = page;
-          });
-        },
+      child: PageView.builder(
+        itemCount: _pages != null ? _pages!.length : 1,
         itemBuilder: (context, index) {
-          return Container(
-            // padding: EdgeInsets.all(16.0),
-            child: SelectableText(
-              _pages[index],
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                height: widget.lineHeight,
-                color: widget.textColor,
-              ),
-              textAlign: TextAlign.justify,
-            ),
+          return LayoutBuilder(
+            builder: (context, pageConstraints) {
+              return Container(
+                color: widget.bookView.getBackgroundColor,
+                padding: EdgeInsets.only(top:32, bottom: 16,left: 16,right: 16),
+                child: LayoutBuilder(
+                  builder: (context, textConstraints) {
+                    if (!_isInitialized) {
+                      _isInitialized = true;
+                      _loadAndPaginateText(textConstraints);
+                    }
+
+                    if (_pages == null) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    // УБИРАЕМ FutureBuilder - _pages![index] это просто String
+                    return Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.green, width: 3.0),
+                      ),
+                      child: SelectableText(
+                        _pages![index], // ← ПРОСТО БЕРЕМ СТРОКУ ИЗ СПИСКА
+                        style: textStyle,
+                        textAlign: TextAlign.justify,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
           );
         },
-      )
-          : Center(
-        child: CircularProgressIndicator(),
       ),
     );
   }
 
-  void _calculatePages({
-    required String text,
-    required double pageWidth,
-    required double pageHeight,
-    required double fontSize,
-    required double lineHeight,
-  }) {
-    print('🔄 [TEXT_PAGE] Calculating pages with TextPaginator');
+  Future<String> readBookText(String filePath) async {
+    try {
+      final file = File(filePath);
 
-    final paginator = TextPaginator();
-    final newPages = paginator.paginate(
-      fullText: text,
-      textStyle: TextStyle(
-        fontSize: fontSize,
-        height: lineHeight,
-        color: widget.textColor,
-      ),
-      pageSize: Size(pageWidth, pageHeight),
-      // padding: EdgeInsets.all(16.0),
-    );
+      // Проверяем существование файла
+      if (!await file.exists()) {
+        throw Exception('Файл не найден: $filePath');
+      }
 
-    if (mounted) {
-      setState(() {
-        _pages = newPages;
-        _isCalculatingPages = false;
-      });
+      // Читаем весь текст из файла
+      String text = await file.readAsString();
+
+      print('✅ Текст успешно прочитан из файла');
+      print('📁 Путь: $filePath');
+      print('📝 Длина текста: ${text.length} символов');
+
+      return text;
+    } catch (e) {
+      print('❌ Ошибка чтения файла: $e');
+      rethrow;
     }
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  void _loadAndPaginateText(BoxConstraints constraints) async {
+    try {
+      final availableWidth = constraints.maxWidth;
+      final availableHeight = constraints.maxHeight;
+      // 1. Читаем текст из файла
+      String text = await readBookText(widget.book.filePath);
+
+      // 3. Передаем ВСЕ параметры в пагинатор
+      final paginator = BasicTextPaginator();
+      List<String> pages = paginator.paginate(
+        text: text,
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+        textStyle: textStyle,
+      );
+
+      setState(() {
+        _pages = pages;
+      });
+
+    } catch (e) {
+      print('Ошибка: $e');
+    }
   }
 }
 

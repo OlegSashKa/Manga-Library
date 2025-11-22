@@ -3,7 +3,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
-import 'package:mangalibrary/core/utils/book_page_updater.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -59,21 +58,5 @@ class BookViewTable{
       where: 'id = ?',
       whereArgs: [currentId],
     );
-  }
-
-  static Future<void> updateSettingsWithPageRecalculation(BookView bookView, BuildContext context) async {
-    await updateSettings(bookView);
-
-    AppGlobals.showInfo('Настройки сохранены. Начинается пересчёт страниц...');
-
-    Future.delayed(Duration(seconds: 1), (){
-      BookPageUpdater.recalculateAllBooksPages(context, null).then((_){
-
-        AppGlobals.showSuccess('Пересчёт страниц завершён!');
-
-      }).catchError((e){
-        AppGlobals.showError('Ошибка пересчёта страниц: $e');
-      });
-    });
   }
 }
