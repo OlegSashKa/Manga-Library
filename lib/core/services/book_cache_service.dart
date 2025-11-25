@@ -15,7 +15,7 @@ class BookCacheService {
     if (_lruList.length >= maxCacheSize) {
       final oldestBookId = _lruList.removeAt(0);
       _pageCache.remove(oldestBookId);
-      print('🧹 Удалена из кэша книга ID: $oldestBookId');
+      // print('🧹 Удалена из кэша книга ID: $oldestBookId');
     }
 
     _pageCache[bookId] = pages;
@@ -23,8 +23,8 @@ class BookCacheService {
     _lruList.remove(bookId);
     _lruList.add(bookId);
 
-    print('💾 Закэширована книга ID: $bookId (${pages.length} страниц)');
-    print('📊 Размер кэша: ${_pageCache.length} книг');
+    // print('💾 Закэширована книга ID: $bookId (${pages.length} страниц)');
+    // print('📊 Размер кэша: ${_pageCache.length} книг');
   }
 
   void updateCachedPages(int bookId, List<String> newPages) {
@@ -33,7 +33,7 @@ class BookCacheService {
       // Обновляем LRU
       _lruList.remove(bookId);
       _lruList.add(bookId);
-      print('🔄 Обновлён кэш книги ID: $bookId (${newPages.length} страниц)');
+//       print('🔄 Обновлён кэш книги ID: $bookId (${newPages.length} страниц)');
     }
   }
 
@@ -42,7 +42,7 @@ class BookCacheService {
       // Обновляем LRU
       _lruList.remove(bookId);
       _lruList.add(bookId);
-      print('⚡ Загружено из кэша: книга ID: $bookId');
+//       print('⚡ Загружено из кэша: книга ID: $bookId');
       return _pageCache[bookId];
     }
     return null;
@@ -51,12 +51,12 @@ class BookCacheService {
   void clearCache() {
     _pageCache.clear();
     _lruList.clear();
-    print('🗑️ Кэш полностью очищен');
+//     print('🗑️ Кэш полностью очищен');
   }
 
   void removeFromCache(int bookId) {
     _pageCache.remove(bookId);
     _lruList.remove(bookId);
-    print('🧹 Удалена из кэша книга ID: $bookId');
+//     print('🧹 Удалена из кэша книга ID: $bookId');
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:mangalibrary/domain/models/book.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:mangalibrary/enums/book_enums.dart';
@@ -48,14 +49,14 @@ class FileService{
 
   /// Просто копирует все книги в Downloads без лишней информации
   static Future<void> exportBooksToDownloadsSimple() async {
-    print('🟡 НАЧИНАЕМ ЭКСПОРТ КНИГ В DOWNLOADS...');
+    // print('🟡 НАЧИНАЕМ ЭКСПОРТ КНИГ В DOWNLOADS...');
 
     // 1. Получаем папку книг приложения
     final booksDir = await getBooksDirectory();
-    print('🟡 Исходная папка: ${booksDir.path}');
+    // print('🟡 Исходная папка: ${booksDir.path}');
 
     if (!await booksDir.exists()) {
-      print('❌ Папка книг не существует!');
+      // print('❌ Папка книг не существует!');
       return;
     }
 
@@ -67,23 +68,23 @@ class FileService{
     final exportDir = Directory(path.join(downloadDirectory.path, 'MangaLibrary_Books'));
     if (!await exportDir.exists()) {
       await exportDir.create(recursive: true);
-      print('🟡 Создана папка экспорта: ${exportDir.path}');
+//       print('🟡 Создана папка экспорта: ${exportDir.path}');
     }
 
     // 4. Копируем ВСЕ содержимое папки books
     await _copyAllContents(booksDir, exportDir);
-
-    print('✅ ЭКСПОРТ КНИГ ЗАВЕРШЕН!');
+// 
+//     print('✅ ЭКСПОРТ КНИГ ЗАВЕРШЕН!');
   }
 
   /// Копирует все содержимое папки с детальным логированием
   static Future<void> _copyAllContents(Directory sourceDir, Directory targetDir) async {
-    print('🟡 Начинаем копирование из ${sourceDir.path} в ${targetDir.path}');
+//     print('🟡 Начинаем копирование из ${sourceDir.path} в ${targetDir.path}');
 
     try {
       // Получаем ВСЕ файлы и папки
       final List<FileSystemEntity> allEntities = await sourceDir.list(recursive: true).toList();
-      print('🟡 Найдено элементов: ${allEntities.length}');
+//       print('🟡 Найдено элементов: ${allEntities.length}');
 
       int filesCopied = 0;
       int foldersCreated = 0;
@@ -101,16 +102,16 @@ class FileService{
             if (!await parentDir.exists()) {
               await parentDir.create(recursive: true);
               foldersCreated++;
-              print('📁 СОЗДАНА ПАПКА: ${parentDir.path}');
+//               print('📁 СОЗДАНА ПАПКА: ${parentDir.path}');
             }
 
             // Копируем файл
             await entity.copy(targetPath);
             filesCopied++;
-            print('✅ СКОПИРОВАН ФАЙЛ: ${entity.path} -> $targetPath');
+//             print('✅ СКОПИРОВАН ФАЙЛ: ${entity.path} -> $targetPath');
 
           } catch (e) {
-            print('❌ ОШИБКА КОПИРОВАНИЯ ФАЙЛА ${entity.path}: $e');
+//             print('❌ ОШИБКА КОПИРОВАНИЯ ФАЙЛА ${entity.path}: $e');
           }
 
         } else if (entity is Directory) {
@@ -120,18 +121,18 @@ class FileService{
             if (!await targetFolder.exists()) {
               await targetFolder.create(recursive: true);
               foldersCreated++;
-              print('📁 СОЗДАНА ПАПКА: $targetPath');
+//               print('📁 СОЗДАНА ПАПКА: $targetPath');
             }
           } catch (e) {
-            print('❌ ОШИБКА СОЗДАНИЯ ПАПКИ $targetPath: $e');
+//             print('❌ ОШИБКА СОЗДАНИЯ ПАПКИ $targetPath: $e');
           }
         }
       }
-
-      print('✅ КОПИРОВАНИЕ ЗАВЕРШЕНО: файлов=$filesCopied, папок=$foldersCreated');
+// 
+//       print('✅ КОПИРОВАНИЕ ЗАВЕРШЕНО: файлов=$filesCopied, папок=$foldersCreated');
 
     } catch (e) {
-      print('❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ КОПИРОВАНИИ: $e');
+      // print('❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ КОПИРОВАНИИ: $e');
       rethrow;
     }
   }
@@ -149,9 +150,9 @@ class FileService{
         return BookType.manga;  // Это манга
       case '.epub':
       case '.txt':
-      case '.pdf':
       case '.fb2':
-        return BookType.text;   // Это текстовая книга
+        return BookType.text;
+      case '.pdf':// Это текстовая книга
       default:
         return BookType.text;   // По умолчанию считаем текстовой
     }
@@ -195,7 +196,7 @@ class FileService{
         fileSize: fileSize,
       );
     }catch (e) {
-      print('Ошибка импорта книги: $e');
+//       print('Ошибка импорта книги: $e');
       rethrow; // Перебрасываем ошибку дальше
     }
   }
@@ -231,6 +232,22 @@ class FileService{
     throw Exception('Файл книги не найден в папке $bookTitle');
   }
 
+  static Future<void> deleteBookFiles(Book book) async {
+    try{
+      final bookDir = await FileService.getBookDirectory(book.title);
+      // Проверяем существует ли папка
+      if (await bookDir.exists()) {
+        // Удаляем всю папку с содержимым рекурсивно
+        await bookDir.delete(recursive: true);
+//         print('Папка книги удалена: ${bookDir.path}');
+      } else {
+//         print('Папка книги не существует: ${bookDir.path}');
+      }
+    }catch(e){
+//       print('Ошибка при удалении файлов книги: $e');
+    }
+  }
+
   static Future<void> clearFilePickerCache() async {
     try {
       // Получаем корневую директорию приложения
@@ -238,22 +255,21 @@ class FileService{
       final appPath = appDir.parent.path; // Поднимаемся на уровень выше
 
       final cacheDir = Directory('$appPath/cache/file_picker');
-      print("путь до кэша: ${cacheDir.path}");
-      print("путь до кэша существует: ${await cacheDir.exists()}");
+//       print("путь до кэша: ${cacheDir.path}");
+//       print("путь до кэша существует: ${await cacheDir.exists()}");
 
       if (await cacheDir.exists()) {
         // Сначала посмотрим что внутри
         final files = await cacheDir.list(recursive: true).toList();
-        print("Найдено файлов/папок в кеше: ${files.length}");
+//         print("Найдено файлов/папок в кеше: ${files.length}");
 
         await cacheDir.delete(recursive: true);
-        print('✅ Кеш файлового пикера очищен');
+//         print('✅ Кеш файлового пикера очищен');
       } else {
-        print('❌ Папка кеша не найдена');
+//         print('❌ Папка кеша не найдена');
       }
     } catch (e) {
-      print('❌ Ошибка очистки кеша файлового пикера: $e');
+//       print('❌ Ошибка очистки кеша файлового пикера: $e');
     }
   }
-
 }

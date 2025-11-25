@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
+import 'package:mangalibrary/core/database/tables/chapters_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
+import 'package:mangalibrary/core/services/app_utils.dart';
+import 'package:mangalibrary/core/services/file_service.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/book_details_screen.dart';
 import 'package:mangalibrary/ui/library/BookTags.dart';
@@ -35,6 +38,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   final BooksTable _booksTable = BooksTable();
+  final ChapterTable _chaptersTable = ChapterTable();
 
   // Переменные для поиска
   final TextEditingController _searchController = TextEditingController();
@@ -52,9 +56,19 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     _loadLibraryData();
   }
 
-  void _loadLibraryData() async {
+  Future<void> _loadLibraryData() async {
     try{
       List<Book> booksFromDb = await _booksTable.getAllBooks();
+
+      for (final book in booksFromDb) {
+        if (book.id != null) {
+          // Загружаем главы по ID книги
+          final chapters = await _chaptersTable.getChaptersByBookId(book.id!);
+
+          // Присваиваем загруженные главы объекту Book
+          book.chapters = chapters;
+        }
+      }
 
       setState(() {
         // ВАЖНО: полностью очищаем список перед добавлением книг из БД
@@ -63,16 +77,14 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         _filteredBookList = List.from(_bookList);
       });
 
-      // УБИРАЕМ добавление тестовой книги если есть книги из БД
-      // Тестовая книга добавляется ТОЛЬКО если БД пустая
       if (_bookList.isEmpty) {
-        print('База пуста, загружается тестовая книга.');
+//         print('База пуста, загружается тестовая книга.');
         _addMockDataForTesting();
       } else {
-        print('Загружено книг из БД: ${_bookList.length}');
+//         print('Загружено книг из БД: ${_bookList.length}');
       }
     } catch (e) {
-      print('Ошибка загрузки из базы: $e');
+//       print('Ошибка загрузки из базы: $e');
       // Только в случае ошибки добавляем тестовые данные
       _addMockDataForTesting();
     }
@@ -83,7 +95,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       _bookList.clear();
       _bookList.addAll(MockData.getMockManga());
       _filteredBookList = List.from(_bookList);
-      print('Добавлено тестовых книг: ${_bookList.length}');
+//       print('Добавлено тестовых книг: ${_bookList.length}');
     });
   }
 
@@ -729,53 +741,55 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   }
 
   void _openBookDetails(Book book) async {
+    print("_openBookDetails chaters: ${book.chapters.length} ");
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => BookDetailsScreen(
           book: book,
           onDelete: () {
+            _loadLibraryData();
             AppGlobals.showInfo('Книга "${book.title}" удалена');
           },
         ),
       ),
-    ).then((_) async {
-      final BooksTable booksTable = BooksTable();
-      final Book? updatedBook = await booksTable.getBookById(book.id!);
-      if (updatedBook != null) {
-        // ВЫЧИСЛЯЕМ СТАТУС НА ОСНОВЕ ПРОГРЕССА
-        BookStatus calculateStatus(double progress) {
-          if (progress < 0.1) return BookStatus.planned;
-          if (progress < 1.0) return BookStatus.reading;
-          return BookStatus.completed;
-        }
-
-        BookStatus newStatus = calculateStatus(updatedBook.progress);
-
-        // ОБНОВЛЯЕМ СТАТУС В БАЗЕ ДАННЫХ
-        await booksTable.updateBookField(
-            bookId: book.id!,
-            fieldName: 'status',
-            value: newStatus.name // ← Сохраняем как строку!
-        );
-
-        setState(() {
-          // ОБНОВЛЯЕМ ВЕСЬ ОБЪЕКТ КНИГИ, а не отдельные поля
-          final index = _bookList.indexWhere((b) => b.id == book.id);
-          if (index != -1) {
-            _bookList[index] = Book.fromMap({
-              ...updatedBook.toMap(),
-              'status': newStatus.name // ← Обновляем статус
-            });
-            _filteredBookList = List.from(_bookList);
-          }
-        });
-
-        print("Статус книги обновлен на: $newStatus");
-      }
-    });
-    _loadLibraryData(); // Перезагружаем данные для гарантии
+    );
+    await _loadLibraryData(); // Перезагружаем данные для гарантии
   }
-
+  //.then((_) async {
+  //       final BooksTable booksTable = BooksTable();
+  //       final Book? updatedBook = await booksTable.getBookById(book.id!);
+  //       if (updatedBook != null) {
+  //         // ВЫЧИСЛЯЕМ СТАТУС НА ОСНОВЕ ПРОГРЕССА
+  //         BookStatus calculateStatus(double progress) {
+  //           if (progress < 0.1) return BookStatus.planned;
+  //           if (progress < 1.0) return BookStatus.reading;
+  //           return BookStatus.completed;
+  //         }
+  //
+  //         BookStatus newStatus = calculateStatus(updatedBook.progress);
+  //
+  //         // ОБНОВЛЯЕМ СТАТУС В БАЗЕ ДАННЫХ
+  //         await booksTable.updateBookField(
+  //             bookId: book.id!,
+  //             fieldName: 'status',
+  //             value: newStatus.name // ← Сохраняем как строку!
+  //         );
+  //
+  //         setState(() {
+  //           // ОБНОВЛЯЕМ ВЕСЬ ОБЪЕКТ КНИГИ, а не отдельные поля
+  //           final index = _bookList.indexWhere((b) => b.id == book.id);
+  //           if (index != -1) {
+  //             _bookList[index] = Book.fromMap({
+  //               ...updatedBook.toMap(),
+  //               'status': newStatus.name // ← Обновляем статус
+  //             });
+  //             _filteredBookList = List.from(_bookList);
+  //           }
+  //         });
+  //
+  //         print("Статус книги обновлен на: $newStatus");
+  //       }
+  //     });
   void _addNewBook() async {
     Book? newBook = await showDialog<Book>(
         context: context,
@@ -1130,7 +1144,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     });
 
     try {
-      print('=== НАЧАЛО ЭКСПОРТА ===');
+//       print('=== НАЧАЛО ЭКСПОРТА ===');
 
       // Просто вызываем экспорт всего
       await _dbHelper.exportEverythingToDownloads();
@@ -1142,7 +1156,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       AppGlobals.showSuccess('Библиотека экспортирована!');
 
     } catch (e) {
-      print('=== ОШИБКА ЭКСПОРТА: $e ===');
+//       print('=== ОШИБКА ЭКСПОРТА: $e ===');
       setState(() {
         _exportStatus = '❌ Ошибка: $e';
       });
@@ -1152,7 +1166,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       setState(() {
         _isExporting = false;
       });
-      print('=== ЗАВЕРШЕНИЕ ЭКСПОРТА ===');
+//       print('=== ЗАВЕРШЕНИЕ ЭКСПОРТА ===');
     }
   }
 }

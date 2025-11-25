@@ -1,12 +1,18 @@
+import 'package:epub_pro/epub_pro.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:html/parser.dart' show parse;
 import 'package:mangalibrary/core/database/tables/book_view_table.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
+import 'package:mangalibrary/core/database/tables/chapters_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
+import 'package:mangalibrary/core/utils/epub_parser_utils.dart';
+import 'package:mangalibrary/core/utils/textPaginator.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/add_book_dialog/tag_input_widget.dart';
 import 'package:path/path.dart' as path;
@@ -63,10 +69,10 @@ class _AddBookDialogState extends State<AddBookDialog> {
         minWidth: 300,
         maxWidth: 380,
       ),
-      shape: RoundedRectangleBorder( // ← ДОБАВЛЯЕМ ФОРМУ
-        borderRadius: BorderRadius.circular(12), // ← ОДИНАКОВОЕ СКРУГЛЕНИЕ ВСЕХ УГЛОВ
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
-      titlePadding: EdgeInsets.zero, // ← УБИРАЕМ ОТСТУПЫ У ЗАГОЛОВКА
+      titlePadding: EdgeInsets.zero,
       insetPadding: EdgeInsets.zero,
       title: Container(
         padding: EdgeInsets.all(18),
@@ -119,7 +125,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
                 setState(() {
                   _tags = newTags;
                 });
-                },
+              },
               labelText: 'Введите тег',
               hintText: 'фэнтези, приключения, роман',
             ),
@@ -177,7 +183,6 @@ class _AddBookDialogState extends State<AddBookDialog> {
         ),
       ),
       actions: [
-        // Кнопка отмены
         TextButton(
           onPressed: () {
             Navigator.pop(context);
@@ -191,10 +196,10 @@ class _AddBookDialogState extends State<AddBookDialog> {
             backgroundColor: Colors.deepPurple,
           ),
           child: Text(
-              'Сохранить',
-              style: TextStyle(
-                color: Colors.white,
-              ),
+            'Сохранить',
+            style: TextStyle(
+              color: Colors.white,
+            ),
           ),
         )
       ],
@@ -205,13 +210,13 @@ class _AddBookDialogState extends State<AddBookDialog> {
     try{
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'epub', 'txt', 'cbz', 'cbr'],
+        allowedExtensions: ['epub', 'txt'],
         allowMultiple: false,
       );
 
       if(result == null){
         // Пользователь отменил выбор - это не ошибка
-        print('Пользователь отменил выбор файла');
+//         print('Пользователь отменил выбор файла');
         return; // Просто выходим из функции
       }
 
@@ -236,16 +241,16 @@ class _AddBookDialogState extends State<AddBookDialog> {
 
       _autoFillBookTitle(file.name);
 
-      print('''
-✅ Файл выбран успешно:
-   Путь: $_selectedFilePath
-   Имя: $_fileName
-   Размер: $_fileSize байт
-   Расширение: ${file.extension}
-''');
+//       print('''
+// ✅ Файл выбран успешно:
+//    Путь: $_selectedFilePath
+//    Имя: $_fileName
+//    Размер: $_fileSize байт
+//    Расширение: ${file.extension}
+// ''');
 
     } catch (e){
-      print('Ошибка выбора файла: $e');
+//       print('Ошибка выбора файла: $e');
       AppGlobals.showError('Не удалось выбрать файл');
     }
   }
@@ -279,7 +284,6 @@ class _AddBookDialogState extends State<AddBookDialog> {
   }
 
   void _saveBook() async {
-    // Показываем индикатор загрузки
     if (_selectedFilePath == null || _selectedFilePath!.isEmpty) {
       AppGlobals.showError('Файл не выбран');
       return;
@@ -290,103 +294,168 @@ class _AddBookDialogState extends State<AddBookDialog> {
       return;
     }
 
-    showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: CircularProgressIndicator(),
-        ),
-    );
+    final String bookTitle = _titleController.text;
+    final BooksTable booksTable = BooksTable();
 
-    try{
-      final booksTable = BooksTable();
-
-      bool bookExists = await booksTable.doesBookExist(_titleController.text);
+    try {
+      bool bookExists = await booksTable.doesBookExist(bookTitle);
       if (bookExists) {
-        Navigator.pop(context); // Закрываем индикатор
-        AppGlobals.showError('Книга с названием "${_titleController.text}" уже существует в библиотеке');
+        AppGlobals.showError('Книга с названием "$bookTitle" уже существует в библиотеке');
         return;
       }
+    } catch (e) {
+      AppGlobals.showError('Ошибка проверки существования книги');
+      return;
+    }
 
-      BookImportResult importResult  = await FileService.importBook(
+    // Показываем индикатор загрузки после всех синхронных проверок
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    int? bookId;
+    Book? newBook;
+
+    try {
+      // 2. ИМПОРТ ФАЙЛА
+      BookImportResult importResult = await FileService.importBook(
           _selectedFilePath!,
-          _titleController.text
+          bookTitle
       );
 
-      BookView bookViewSettings = await BookViewTable.getSettings();
-
-      int totalPages = 1;
-      if (importResult.filePath.endsWith('.txt')) {
-        try {
-          final file = File(importResult.filePath);
-          if (await file.exists()) {
-            final content = await file.readAsString();
-
-            final mediaQuery = MediaQuery.of(context);
-            const double horizontalPadding = 16.0;
-            const double verticalPadding = 16.0;
-
-            final double availableHeight = mediaQuery.size.height
-                - mediaQuery.padding.top
-                - kToolbarHeight
-                - mediaQuery.padding.bottom
-                - (verticalPadding * 2);
-
-            final double availableWidth = mediaQuery.size.width - (horizontalPadding * 2);
-
-            print('📖 Для книги "${_titleController.text}" рассчитано страниц: $totalPages');
-            print('Использованы настройки: шрифт ${bookViewSettings.fontSize}, интервал ${bookViewSettings.lineHeight}');
-          }
-        } catch (e) {
-          print('⚠️ Ошибка расчёта страниц: $e');
-          // Не прерываем процесс из-за ошибки расчёта
-        }
-      }
-
-      BookStatus calculateStatus(double progress) {
-        if (progress < 0.1) return BookStatus.planned;
-        if (progress < 1.0) return BookStatus.reading;
-        return BookStatus.completed;
-      }
-
-      Book newBook = Book(
-        title: _titleController.text,
+      // 3. ПЕРВИЧНОЕ СОХРАНЕНИЕ
+      // Инициализируем newBook с базовыми значениями (totalPages=1, chapters=[])
+      newBook = Book(
+        title: bookTitle,
         author: _authorController.text.isEmpty ? 'Неизвестен' : _authorController.text,
-        bookType: importResult.bookType,      // Тип определился автоматически!
-        fileFolderPath: importResult.bookPath,      // Путь к скопированному файлу
-        filePath: importResult.filePath,      // Путь к скопированному файлу
+        bookType: importResult.bookType,
+        fileFolderPath: importResult.bookPath,
+        filePath: importResult.filePath,
         fileFormat: path.extension(importResult.filePath).replaceFirst('.', ''),
-        fileSize: importResult.fileSize,      // Реальный размер файла
+        fileSize: importResult.fileSize,
         addedDate: DateTime.now(),
         lastDateOpen: DateTime.now(),
-        // Добавляем недостающие поля по умолчанию:
-        currentPage: 0,
-        totalPages: totalPages,
-        progress: 0.0,
-        status: calculateStatus(0.0),
-        readingTime: Duration.zero,
+        totalPages: 1,
         isFavorite: false,
         tags: [Book.getBookTypeByName(importResult.bookType.name), ..._tags],
-        chapters: const [],
+        chapters: [], // Временно пустой список
         currentChapterIndex: 0,
       );
 
-      final bookId = await BooksTable().insertBook(newBook);
+      bookId = await booksTable.insertBook(newBook);
+      newBook.id = bookId;
+//       print('✅ [DB] Книга временно сохранена. ID: $bookId');
 
-      newBook.id = bookId; // Сохраняем ID из базы
 
-      Navigator.pop(context);
+      // 4. ОБРАБОТКА КОНТЕНТА И ПАГИНАЦИЯ (Только если bookId успешно получен)
+      final chaptersTable = ChapterTable(); // Объявляем внутри try
+      int calculatedTotalPages = 1;
+      BookView bookViewSettings = await BookViewTable.getSettings();
 
-      AppGlobals.showSuccess('Книга "${newBook.title}" успешно добавлена!');
+      // РАСЧЕТ ДОСТУПНОЙ ОБЛАСТИ
+      final mediaQuery = MediaQuery.of(context);
+      const double horizontalPadding = 16.0 * 2;
+      const double verticalPadding = 32.0 + 16.0;
 
-      widget.onBookAdded(newBook);
-      Navigator.pop(context);
+      final double availableWidth = mediaQuery.size.width - horizontalPadding;
+      final double availableHeight = mediaQuery.size.height - verticalPadding - mediaQuery.padding.top - mediaQuery.padding.bottom;
 
-    }catch (e, stackTrace){
+      if (importResult.filePath.endsWith('.txt')) {
+        // Логика пагинации для TXT
+        final file = File(importResult.filePath);
+        if (await file.exists()) {
+          final content = await file.readAsString();
+
+          final paginator = CoolTextPaginator();
+          final pages = paginator.paginate(
+            text: content,
+            availableWidth: availableWidth,
+            availableHeight: availableHeight,
+            textStyle: TextStyle(
+              fontSize: bookViewSettings.fontSize,
+              height: bookViewSettings.lineHeight,
+              fontFamily: 'Roboto',
+            ),
+          ).pages;
+
+          calculatedTotalPages = pages.length; // Обновляем
+
+          final VolumeChapter defaultChapter = VolumeChapter(
+            bookId: bookId,
+            title: 'Начало книги',
+            startPage: 1,
+            endPage: calculatedTotalPages, // Используем рассчитанный totalPages
+            position: 0,
+            isRead: BookStatus.planned,
+            readTime: Duration(seconds: 0),
+            currentPage: 0,
+          );
+
+          await chaptersTable.insertChapter(defaultChapter);
+          newBook.chapters.add(defaultChapter); // Обновляем объект
+//
+          print('✅ Рассчитано страниц: $calculatedTotalPages');
+        }
+
+      } else if (importResult.filePath.endsWith('.epub')) {
+        // Логика пагинации для EPUB
+        final bytes = await File(importResult.filePath).readAsBytes();
+        final epubBook = await EpubReader.readBook(bytes);
+        final parsedContent = EpubParserUtils.extractAndPaginateBook(
+            epubBook: epubBook,
+            availableWidth: availableWidth,
+            availableHeight: availableHeight,
+            textStyle: TextStyle(
+              fontSize: bookViewSettings.fontSize,
+              height: bookViewSettings.lineHeight,
+              fontFamily: 'Roboto',
+            ),
+          idBook: bookId,
+        );
+
+        newBook.chapters = parsedContent.chapters;
+        calculatedTotalPages = parsedContent.allBookPages.length;
+        newBook.title = epubBook.title != null ? epubBook.title! : bookTitle;
+        // 🔴 ВАЖНО: Главы вставляются здесь, если это EPUB
+        await chaptersTable.insertChapters(newBook.chapters, newBook.id!);
+
+      } else {
+//         print('📘 Формат ${importResult.bookType} - расчет страниц не реализован');
+      }
+
+      // 5. ОБНОВЛЕНИЕ КНИГИ В БД
+      newBook.totalPages = calculatedTotalPages; // Устанавливаем итоговое значение
+      // 🔴 ИСПРАВЛЕНИЕ #3: Обновление записи в БД
+      await booksTable.updateBook(newBook);
+//       print('✅ [DB] Книга ID $bookId успешно обновлена с totalPages: $calculatedTotalPages');
+
+      // 6. ЗАВЕРШЕНИЕ
       Navigator.pop(context); // Закрываем индикатор
-      print('❌ КРИТИЧЕСКАЯ ОШИБКА: $e');
-      print('📋 Stack trace: $stackTrace');
+      AppGlobals.showSuccess('Книга "${newBook.title}" успешно добавлена!');
+      widget.onBookAdded(newBook);
+      Navigator.pop(context); // Закрываем диалог AddBookDialog
+
+    } catch (e, stackTrace) {
+      // 7. ОБРАБОТКА ОШИБОК И ОТКАТ
+      Navigator.pop(context); // Закрываем индикатор
+//       print('❌ КРИТИЧЕСКАЯ ОШИБКА: $e');
+//       print('📋 Stack trace: $stackTrace');
       AppGlobals.showError('Ошибка: ${e.toString()}');
+
+      // Если книга была сохранена, но произошла ошибка при обработке контента/обновлении
+      if (bookId != null) {
+        // Удаляем запись из таблицы books
+        await booksTable.deleteBook(bookId);
+        // Удаляем скопированный файл и папку книги
+        if (newBook != null) {
+          await FileService.deleteBookFiles(newBook);
+        }
+//         print('🗑️ [ROLLBACK] Книга ID $bookId и ее файлы были удалены.');
+      }
     }
   }
 }

@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:downloadsfolder/downloadsfolder.dart' as downloadsfolder;
+import 'package:path_provider/path_provider.dart';
+
 class AppUtils {
   /// Преобразует байты в читаемый формат (Б, КБ, МБ, ГБ)
   static String formatFileSize(int bytes) {
@@ -22,5 +27,22 @@ class AppUtils {
   static String truncateString(String text, {int maxLength = 50}) {
     if (text.length <= maxLength) return text;
     return '${text.substring(0, maxLength)}...';
+  }
+
+  static Future<File> createTextFile(String text, String fileName) async {
+    try {
+      // Получаем директорию для документов
+      final directory = await downloadsfolder.getDownloadDirectory();
+      final file = File('${directory.path}/$fileName.txt');
+
+      // Записываем текст в файл
+      await file.writeAsString(text, encoding: utf8);
+
+      // print('✅ Файл создан: ${file.path}');
+      return file;
+    } catch (e) {
+      // print('❌ Ошибка создания файла: $e');
+      rethrow;
+    }
   }
 }

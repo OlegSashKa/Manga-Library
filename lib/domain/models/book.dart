@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 
 class Book {
@@ -18,6 +19,7 @@ class Book {
 
   // ПРОГРЕСС ЧТЕНИЯ (на какой странице остановились)
   int currentPage; // Текущая страница
+  int lastSymbolIndex;
   int totalPages; // Всего страниц
   double progress; // Прогресс в процентах (0.0 до 1.0)
 
@@ -30,7 +32,7 @@ class Book {
   bool isFavorite; // В избранном или нет
   List<String> tags;
 
-  List<BookChapter> chapters;
+  List<VolumeChapter> chapters;
   int currentChapterIndex;
 
   bool get hasReadingProgress => currentPage > 0;
@@ -49,8 +51,8 @@ class Book {
     required this.fileFormat,
     required this.fileSize,
     this.currentPage = 0,
+    this.lastSymbolIndex = 0,
     this.totalPages = 0,
-    this.chapters = const [],
     this.currentChapterIndex = 0,
     this.progress = 0.0,
     this.coverImagePath,
@@ -60,6 +62,7 @@ class Book {
     this.readingTime = Duration.zero,
     this.isFavorite = false,
     this.tags = const [],
+    this.chapters = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -72,6 +75,7 @@ class Book {
       'file_format': fileFormat,
       'file_size': fileSize,
       'current_page': currentPage,
+      'last_symbol_index': lastSymbolIndex,
       'total_pages': totalPages,
       'progress': progress,
       'cover_image_path': coverImagePath,
@@ -106,6 +110,7 @@ class Book {
       fileFormat: map['file_format'],
       fileSize: map['file_size'],
       currentPage: map['current_page'],
+      lastSymbolIndex: map['last_symbol_index'] ?? 0,
       totalPages: map['total_pages'],
       progress: map['progress'],
       coverImagePath: map['cover_image_path'],
@@ -171,72 +176,52 @@ class Book {
         return 'Текстовая';
     }
   }
-}
 
-class BookChapter {
-  int? id;
-  int bookId; // ID книги, к которой относится глава
-  String title;
-  int startPage;      // С какой страницы начинается
-  int? endPage;       // На какой заканчивается (опционально)
-  int currentPage;    // Текущая страница в главе
-  bool isRead;        // Прочитана ли глава
-  Duration? readTime; // Время чтения главы
-  int position;       // Порядковый номер главы
-
-  BookChapter({
-    this.id,
-    required this.bookId,
-    required this.title, // Сделано обязательным
-    required this.startPage, // Сделано обязательным
-    this.endPage,
-    this.currentPage = 0,
-    this.isRead = false,
-    this.readTime,
-    required this.position,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'book_id': bookId,
-      'title': title,
-      'start_page': startPage,
-      'end_page': endPage,
-      'current_page': currentPage,
-      'is_read': isRead ? 1 : 0,
-      'read_time': readTime?.inMilliseconds,
-      'position': position,
-    };
-  }
-
-  factory BookChapter.fromMap(Map<String, dynamic> map) {
-    return BookChapter(
-      id: map['id'],
-      bookId: map['book_id'],
-      title: map['title'],
-      startPage: map['start_page'],
-      endPage: map['end_page'],
-      currentPage: map['current_page'] ?? 0,
-      isRead: map['is_read'] == 1,
-      readTime: map['read_time'] != null
-          ? Duration(milliseconds: map['read_time'])
-          : null,
-      position: map['position'] ?? 0,
+  Book copyWith({
+    int? id,
+    String? title,
+    String? author,
+    BookType? bookType,
+    String? fileFolderPath,
+    String? filePath,
+    String? fileFormat,
+    int? fileSize,
+    int? currentPage,
+    int? lastSymbolIndex,
+    int? totalPages,
+    double? progress,
+    String? coverImagePath,
+    BookStatus? status,
+    DateTime? addedDate,
+    DateTime? lastDateOpen,
+    Duration? readingTime,
+    bool? isFavorite,
+    List<String>? tags,
+    List<VolumeChapter>? chapters,
+    int? currentChapterIndex,
+  }) {
+    return Book(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      author: author ?? this.author,
+      bookType: bookType ?? this.bookType,
+      fileFolderPath: fileFolderPath ?? this.fileFolderPath,
+      filePath: filePath ?? this.filePath,
+      fileFormat: fileFormat ?? this.fileFormat,
+      fileSize: fileSize ?? this.fileSize,
+      currentPage: currentPage ?? this.currentPage,
+      lastSymbolIndex: lastSymbolIndex ?? this.lastSymbolIndex,
+      totalPages: totalPages ?? this.totalPages,
+      progress: progress ?? this.progress,
+      coverImagePath: coverImagePath ?? this.coverImagePath,
+      status: status ?? this.status,
+      addedDate: addedDate ?? this.addedDate,
+      lastDateOpen: lastDateOpen ?? this.lastDateOpen,
+      readingTime: readingTime ?? this.readingTime,
+      isFavorite: isFavorite ?? this.isFavorite,
+      tags: tags ?? this.tags,
+      chapters: chapters ?? this.chapters,
+      currentChapterIndex: currentChapterIndex ?? this.currentChapterIndex,
     );
   }
-
-
-  double get progress {
-    if (endPage == null || endPage == startPage) return 0.0;
-    final totalPagesInChapter = endPage! - startPage + 1;
-    final pagesReadInChapter = currentPage - startPage;
-    return pagesReadInChapter / totalPagesInChapter;
-  }
-
-  int? get totalPagesInChapter {
-    if (endPage == null) return null;
-    return endPage! - startPage + 1;
-  }
-
 }

@@ -46,7 +46,7 @@ class BookView{
 
   static BookView defaultSettings() {
     return BookView(
-      fontSize: 16.0,
+      fontSize: 16,
       lineHeight: 1.5,
       backgroundColor: 0xFFFFFFFF, // белый
       textColor: 0xFF000000, // черный

@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/chapters_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/domain/models/book.dart';
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
+import 'package:mangalibrary/enums/book_enums.dart';
 
 class ChapterSection extends StatefulWidget{
   final int bookId; // Добавляем ID книги для загрузки глав
-  final List<BookChapter>? initialChapters; // Начальные главы (опционально)
+  final List<VolumeChapter>? initialChapters; // Начальные главы (опционально)
+  final Function(int targetPage)? onChapterSelected;
 
   const ChapterSection({
     super.key,
     required this.bookId, // Обязательный параметр - ID книги
     this.initialChapters, // Необязательный параметр - начальные главы
+    this.onChapterSelected,
   });
 
   @override
@@ -20,7 +24,7 @@ class ChapterSection extends StatefulWidget{
 
 class _ChapterSectionState extends State<ChapterSection> {
   int collViewBook = 5;
-  List<BookChapter> _chapters = []; // Список глав (будет загружаться из БД)
+  List<VolumeChapter> _chapters = []; // Список глав (будет загружаться из БД)
   bool _isLoading = true; // Флаг загрузки
   bool _hasError = false; // Флаг ошибки
 
@@ -51,14 +55,15 @@ class _ChapterSectionState extends State<ChapterSection> {
         _isLoading = true; // Показываем индикатор загрузки
         _hasError = false; // Сбрасываем флаг ошибки
       });
-      final List<BookChapter> loadedChapters = await _chaptersTable.getChaptersByBookId(widget.bookId);
+      final List<VolumeChapter> loadedChapters = await _chaptersTable.getChaptersByBookId(widget.bookId);
       setState(() {
         _chapters = loadedChapters; // Сохраняем загруженные главы
         _isLoading = false; // Скрываем индикатор загрузки
       });
-      print('✅ Загружено глав: ${_chapters.length} для книги ID: ${widget.bookId}');
+      print("_chapters ${_chapters.first.title}");
+      // print('✅ Загружено глав: ${_chapters.length} для книги ID: ${widget.bookId}');
     }catch (e){
-      print('❌ Ошибка загрузки глав: $e');
+      // print('❌ Ошибка загрузки глав: $e');
       setState(() {
         _hasError = true; // Устанавливаем флаг ошибки
         _isLoading = false; // Скрываем индикатор загрузки
@@ -124,7 +129,7 @@ class _ChapterSectionState extends State<ChapterSection> {
           Container(
             margin: EdgeInsets.symmetric(vertical: 8),
             child: TextButton(
-              onPressed: _showAllChapters, // Обработчик нажатия
+              onPressed: _showAllChapters,
               child: Text(
                 'Показать все главы (еще ${_chapters.length - collViewBook})',
                 style: TextStyle(fontSize: 16),
@@ -135,7 +140,7 @@ class _ChapterSectionState extends State<ChapterSection> {
     );
   }
 
-  Widget _buildChapterTile(BookChapter chapter) {
+  Widget _buildChapterTile(VolumeChapter chapter) {
     return Card(
       margin: EdgeInsets.symmetric(vertical: 4, horizontal: 0),
       child: ListTile(
@@ -155,35 +160,35 @@ class _ChapterSectionState extends State<ChapterSection> {
     );
   }
 
-  Widget _buildChapterIcon(BookChapter chapter) {
-    if(chapter.isRead){
+  Widget _buildChapterIcon(VolumeChapter chapter) {
+    if(chapter.isRead == BookStatus.completed){
       return Icon(Icons.check_circle, color: Colors.green);
-    } else if (chapter.currentPage > 0) {
+    } else if (chapter.isRead == BookStatus.reading) {
       return Icon(Icons.play_circle, color: Colors.orange);
     } else{
       return Icon(Icons.radio_button_unchecked, color: Colors.grey);
     }
   }
 
-  Widget _buildChapterSubtitle(BookChapter chapter) {
-    if(chapter.isRead){
+  Widget _buildChapterSubtitle(VolumeChapter chapter) {
+    if(chapter.isRead == BookStatus.completed){
       return Text('Прочитано');
-    } else if (chapter.currentPage > 0){
-      return Text('Страница ${chapter.currentPage}');
+    } else if (chapter.isRead == BookStatus.reading){
+      return Text('Страница ${chapter.currentPage}/${chapter.endPage}');
     } else {
       return Text('Не начато');
     }
   }
 
-  Widget _buildChapterTrailing(BookChapter chapter) {
+  Widget _buildChapterTrailing(VolumeChapter chapter) {
     // Для прочитанных глав показываем галочку
-    if (chapter.isRead) {
+    if (chapter.isRead == BookStatus.completed) {
       return Icon(Icons.done_all, color: Colors.green);
     }
     // Для глав в процессе показываем текущую страницу
-    else if (chapter.currentPage > 0) {
+    else if (chapter.isRead == BookStatus.reading) {
       return Text(
-        '${chapter.currentPage}',
+        '${chapter.currentPage}/${chapter.endPage}',
         style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.blue,
@@ -196,18 +201,18 @@ class _ChapterSectionState extends State<ChapterSection> {
     }
   }
 
-  void _openChapter(BookChapter chapter) {
-    print('📖 Открыть главу: "${chapter.title}"');
-    print('📄 Страницы: ${chapter.startPage}-${chapter.endPage}');
-    print('📍 Текущая страница: ${chapter.currentPage}');
+  void _openChapter(VolumeChapter chapter) {
+    // print('📖 Открыть главу: "${chapter.title}"');
+    // print('📄 Страницы: ${chapter.startPage}-${chapter.endPage}');
+    // print('📍 Текущая страница: ${chapter.currentPage}');
 
-    // TODO: Здесь будет логика перехода к чтению конкретной главы
-    // Например: Navigator.push(...) к экрану чтения с указанием главы
+    if(widget.onChapterSelected != null)
+      widget.onChapterSelected!(chapter.startPage);
 
     // Можно показать временное уведомление
     AppGlobals.showInfo('Открываем главу: ${chapter.title}');
   }
-  void updateChapters(List<BookChapter> newChapters) {
+  void updateChapters(List<VolumeChapter> newChapters) {
     setState(() {
       _chapters = newChapters;
       _isLoading = false;

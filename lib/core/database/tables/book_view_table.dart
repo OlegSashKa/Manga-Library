@@ -1,10 +1,5 @@
-import 'package:downloadsfolder/downloadsfolder.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/database_helper.dart';
-import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
-import 'package:sqflite/sqflite.dart';
 
 class BookViewTable{
   final DatabaseHelper _dbHelper = DatabaseHelper();

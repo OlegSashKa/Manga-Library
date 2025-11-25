@@ -1,3 +1,5 @@
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
+
 import '../../domain/models/book.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 
@@ -25,7 +27,7 @@ class MockData {
     ];
   }
 
-  List<BookChapter> get testChapters {
+  List<VolumeChapter> get testChapters {
     return [];
   }
 

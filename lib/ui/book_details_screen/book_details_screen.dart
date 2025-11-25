@@ -3,11 +3,11 @@ import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/chapter_section.dart';
 import 'package:mangalibrary/ui/reader_screen/text_reader_screen.dart';
 import '../../domain/models/book.dart';
-import 'package:mangalibrary/core/data/mock_data.dart';
 
 
 class BookDetailsScreen extends StatefulWidget {
@@ -25,9 +25,52 @@ class BookDetailsScreen extends StatefulWidget {
 }
 
 class _BookDetailsScreenState extends State<BookDetailsScreen> {
+  late Book _currentBook;
+  List<VolumeChapter> _chapters = [];
+  bool _isLoading = false;
+  final BooksTable _booksTable = BooksTable();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentBook = widget.book;
+    print('initState DetaislBook chaters: ${_currentBook.chapters.length}');
+    _loadBookData(); // Загружаем основные данные
+  }
+
+  Future<void> _loadBookData({bool initialLoad = false}) async { // initialLoad - опциональный флаг
+    if (_currentBook.id == null) return;
+
+    // Если это не первая загрузка, показываем индикатор
+    if (!initialLoad) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
+    // 1. Вызываем метод, который теперь ВОЗВРАЩАЕТ КНИГУ С ГЛАВАМИ
+    final updatedBook = await _booksTable.getBookById(_currentBook.id!);
+
+    if (updatedBook != null) {
+      setState(() {
+        _currentBook = updatedBook; // _currentBook теперь содержит главы
+        _isLoading = false;
+        print('✅ _loadBookData: Книга обновлена. Глав: ${_currentBook.chapters?.length ?? 0}');
+      });
+    } else {
+      // ... обработка ошибки
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context){
-    final book = widget.book;
+    final book = _currentBook;
+    print('build DetaislBook chaters: ${book.chapters.length}');
     return Scaffold(
       appBar: AppBar(
         title: Text("Детали книги"),
@@ -154,10 +197,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-            '${(book.progress * 100).toInt()}% прочитанно'
-        ),
-        // прогресс-бар
+        Text('${(book.progress * 100).toInt()}% прочитано'),
         LinearProgressIndicator(
           value: book.progress,
           backgroundColor: Colors.grey[300],
@@ -165,10 +205,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           minHeight: 6,
         ),
         SizedBox(height: 4),
-
-        // Страницы
         Text(
-          '${book.currentPage}/${book.totalPages} стр. ',
+          '${book.currentPage}/${book.totalPages} стр.',
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey[600],
@@ -214,78 +252,103 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     );
   }
 
-  Widget _buildReadingButton (BuildContext context, Book book){
-    print('🎨 [BUTTON_COLOR] Статус: ${book.status.name}, Цвет: ${book.statusColor}');
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16),
-      width: double.infinity,
-      child: FilledButton(
-          onPressed: () async {
-            _startReading(context, book);
-          },
+  Widget _buildReadingButton(BuildContext context, Book book) {
+    if (_isLoading) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: null,
           style: FilledButton.styleFrom(
             padding: EdgeInsets.symmetric(vertical: 10),
-            backgroundColor: book.statusColor,
+            backgroundColor: Colors.grey,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(_getButtonIcon(book)),
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
               SizedBox(width: 12),
               Text(
-                book.actionButtonText,
+                'Загрузка...',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if(book.hasReadingProgress) ...[
-                SizedBox(width: 8),
-                Text(
-                  '(${book.currentPage}/${book.totalPages})',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.normal,
-                  ),
-                )
-              ]
             ],
-          )),
+          ),
+        ),
+      );
+    }
+    // Оригинальная кнопка когда не загружается
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: () async {
+          _startReading(context, book);
+        },
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          backgroundColor: book.statusColor,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_getButtonIcon(book)),
+            SizedBox(width: 12),
+            Text(
+              book.actionButtonText,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (book.hasReadingProgress) ...[
+              SizedBox(width: 8),
+              Text(
+                '(${book.currentPage}/${book.totalPages})',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                ),
+              )
+            ]
+          ],
+        ),
+      ),
     );
   }
 
-  void _startReading(BuildContext context, Book book) async {
+  void _startReading(BuildContext context, Book book, {int targetPage = -1}) async {
+//     print("BOOK_DETAILS_SCREEN:");
+//     print("Book currentPage: ${book.currentPage}");
+//     print("fileFormat ${book.fileFormat}");
     if (book.bookType == BookType.text) {
-      await Navigator.of(context).push(
+      // ✅ ПЕРЕДАЕМ КОЛБЭК ДЛЯ ПОЛУЧЕНИЯ ОБНОВЛЕННОЙ КНИГИ
+      await Navigator.of(context).push<Book>(
         MaterialPageRoute(
-          builder: (context) => TextReaderScreen(book: book),
+          builder: (context) => TextReaderScreen(
+            book: book,
+            targetPage: targetPage,
+          ),
         ),
-      ).then((_) async {
-        final BooksTable booksTable = BooksTable();
-        final Book? updatedBook = await booksTable.getBookById(book.id!);
+      );
+      print('_startReading DetaislBook book chaters: ${book.chapters.first.isRead}');
+      await _loadBookData();
 
-        if (updatedBook != null) {
-          print('🔄 [BOOK_DETAILS] Обновление данных книги после чтения:');
-          print('   📊 Старый totalPages: ${widget.book.totalPages}');
-          print('   📊 Новый totalPages: ${updatedBook.totalPages}');
-          print('   📊 Старый currentPage: ${widget.book.currentPage}');
-          print('   📊 Новый currentPage: ${updatedBook.currentPage}');
-          print('   🎨 Старый статус: ${widget.book.status.name}');
-          print('   🎨 Новый статус: ${updatedBook.status.name}');
-
-          setState(() {
-            widget.book.currentPage = updatedBook.currentPage;
-            widget.book.progress = updatedBook.progress;
-            widget.book.totalPages = updatedBook.totalPages;
-            widget.book.status = updatedBook.status;
-
-            print('🎨 [BOOK_DETAILS] Финальный статус: ${widget.book.status.name}');
-          });
-        }
-      });
-
+     // ✅ Принудительно обновляем состояние
+     if (mounted) {
+       setState(() {});
+     }
     } else if (book.bookType == BookType.manga) {
-      // Для манги оставляем старый функционал
       AppGlobals.showInfo('Открытие манги еще не реализованно');
     }
   }
@@ -325,11 +388,19 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   }
 
   Widget _buildChapterSection(Book book){
-    final chapter = MockData().testChapters;
+    print('_buildChapterSection DetaislBook _currentBook chaters: ${_currentBook.chapters.length}');
+    print('_buildChapterSection DetaislBook book chaters: ${book.chapters.length}');
     return Expanded(
         child: Container(
           padding: EdgeInsets.all(16),
-          child: ChapterSection(bookId: book.id!, initialChapters: chapter),
+          child: ChapterSection(
+            bookId: book.id!,
+            initialChapters: book.chapters,
+            // 🔥 ПЕРЕДАЕМ КОЛЛБЭК, который вызывает _navigateToReaderScreen
+            onChapterSelected: (targetPage) {
+             _startReading(context, book, targetPage: targetPage);
+            },
+          ),
         )
     );
   }
@@ -427,7 +498,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     try{
       final bookTable = BooksTable();
 
-      await _deleteBookFiles(book);
+      await FileService.deleteBookFiles(book);
 
       if(book.id != null){
         await bookTable.deleteBook(book.id!);
@@ -436,24 +507,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
       widget.onDelete();
 
     }catch(e){
-      print('Ошибка при удалении книги: $e');
+//       print('Ошибка при удалении книги: $e');
       AppGlobals.showError('Ошибка при удалении книги: $e');
-    }
-  }
-
-  Future<void> _deleteBookFiles(Book book) async {
-    try{
-      final bookDir = await FileService.getBookDirectory(book.title);
-      // Проверяем существует ли папка
-      if (await bookDir.exists()) {
-        // Удаляем всю папку с содержимым рекурсивно
-        await bookDir.delete(recursive: true);
-        print('Папка книги удалена: ${bookDir.path}');
-      } else {
-        print('Папка книги не существует: ${bookDir.path}');
-      }
-    }catch(e){
-      print('Ошибка при удалении файлов книги: $e');
     }
   }
 }

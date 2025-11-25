@@ -1,10 +1,9 @@
-import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 
 abstract class TextPaginator {
-  List<String> paginate({
+  PaginationResult paginate({
     required String text,
     required double availableWidth,
     required double availableHeight,
@@ -12,173 +11,229 @@ abstract class TextPaginator {
   });
 }
 
-class BasicTextPaginator extends TextPaginator {
-  // КЭШ для хранения всех абзацев (добавляем в начало класса)
-  String str ='''The second super long continuous line continues testing the pagination system and checks how the algorithm handles text where there are no natural line breaks and all words run together without any line breaks or punctuation marks that could help in determining page boundaries which is a challenging task for any text processor especially when font size can change dynamically during reading by the user.
+class PaginationResult {
+  final List<String> pages;
+  final int targetPageIndex;
 
-Third mega long string without a single line break for maximum testing of paginator capabilities which should be able to split such text into pages correctly
-  ''';
+  PaginationResult({
+    required this.pages,
+    required this.targetPageIndex,
+  });
+}
 
-  List<String>? _cachedParagraphs;
-  String? _cachedText;
-  // Счетчик использованных абзацев
-  int _usedParagraphsCount = 0;
+class CoolTextPaginator extends TextPaginator {
+
+  String formatBookTextOptimized(String text) {
+    final buffer = StringBuffer('\u00A0\u00A0\u00A0\u00A0\u00A0');
+    const String indent = '\u00A0\u00A0\u00A0\u00A0\u00A0';
+
+    // Флаги состояния
+    bool inParagraph = false;
+    bool previousWasNewline = false;
+
+    // Новый флаг для пропуска пробелов после \n
+    bool shouldSkipSpace = false;
+
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
+
+      // Символы, которые нужно игнорировать всегда
+      if (char == '\r' || char == '\t' || char == '\u00A0') {
+        continue;
+      }
+
+      // Если мы должны пропустить пробел, и текущий символ - пробел, пропускаем его.
+      if (shouldSkipSpace && char == ' ') {
+        continue;
+      }
+
+      if (char == '\n') {
+        // Мы встретили \n, сбрасываем флаг, который мог быть установлен пробелом
+        shouldSkipSpace = true;
+
+        if (previousWasNewline && inParagraph) {
+          // Двойной \n - конец абзаца
+          buffer.write('\n$indent'); // Используем \n\n для вертикального интервала
+          inParagraph = false;
+          previousWasNewline = false;
+        } else {
+          // Одинарный \n (мягкий перенос строки)
+          buffer.write('\n');
+          previousWasNewline = true;
+        }
+
+      } else {
+        // Обычный символ (включая ' ')
+
+        // Как только мы видим любой контентный символ (включая ' '),
+        // мы больше не пропускаем пробелы в начале (так как они уже внутри абзаца)
+        shouldSkipSpace = false;
+
+        if (!inParagraph) {
+          inParagraph = true;
+        }
+
+        // ВАЖНОЕ ИЗМЕНЕНИЕ: Отступ добавляется только при ДВОЙНОМ \n
+        if (previousWasNewline && inParagraph) {
+          // Если предыдущий был \n, а текущий символ - НЕ \n,
+          // это означает, что предыдущий \n был одиночным переносом строки.
+          // В вашей старой логике здесь добавлялся отступ,
+          // что и приводило к отступу при мягком переносе.
+          // Мы просто пропускаем этот блок, чтобы не добавлять отступ.
+
+          // Если вы хотите, чтобы одиночный \n всегда давал отступ (как в старой логике):
+          buffer.write(indent);
+        }
+
+        buffer.write(char);
+        previousWasNewline = false;
+      }
+    }
+    return buffer.toString();
+  }
+
 
   @override
-  List<String> paginate({
+  PaginationResult paginate({
     required String text,
     required double availableWidth,
     required double availableHeight,
     required TextStyle textStyle,
   }) {
-    print('=== НАЧАЛО ИНКРЕМЕНТАЛЬНОЙ ПАГИНАЦИИ ===');
-    availableWidth = availableWidth.floorToDouble();
-    availableHeight = availableHeight.floorToDouble();
-    // НАХОДИМ ВСЕ АБЗАЦЫ ОДИН РАЗ (заменяем старую логику)
-    if (_cachedParagraphs == null || _cachedText != text) {
-      print('🔍 Поиск всех абзацев в тексте...');
-      _cachedParagraphs = _getAllParagraphs(text, 0);
-      _cachedText = text;
-      _usedParagraphsCount = 0; // ← СБРОС
-    }
+    text = formatBookTextOptimized(text);
+    // print("text: \n$text");
 
+    availableWidth = (availableWidth * 0.955).floorToDouble();
+    // ЗАДАЧА 1: Вычисляем высоту строки и максимальное количество строк
+//     print("PAGINTE availableWidth $availableWidth");
+//     print("PAGINTE availableHeight $availableHeight");
+
+    final lineHeight = _calculateLineHeight(textStyle);
+    final maxLines = _calculateMaxLines(availableHeight, lineHeight);
+    
     final pages = <String>[];
+    String remainingText = text;
     int pageNumber = 1;
-    // ПРОСТОЙ ЦИКЛ: пока есть неиспользованные абзацы
-    while (_usedParagraphsCount  < _cachedParagraphs!.length) {
-      print('\n--- Создание страницы $pageNumber ---');
+    int accumulatedLength = 0;
+    bool targetPageFound = false;
 
-      String pageText = _buildPageContentFromParagraphs(
+    const Set<String> whitespaceCharacters = {
+      '\n', '\r', ' ', '\t',
+    };
+
+    // ЗАДАЧА 3: Повторяем пока есть текст
+    while (remainingText.isNotEmpty) {
+
+      // ЗАДАЧА 2: Извлекаем текст для одной страницы
+      final pageText = _extractPageText(
+        text: remainingText,
         availableWidth: availableWidth,
-        availableHeight: availableHeight,
+        maxLines: maxLines,
         textStyle: textStyle,
       );
 
-
       if (pageText.isEmpty) {
-        print('⚠️  Пустая страница! Прерываем.');
+//         print('⚠️ Остановка пагинации: _extractPageText вернул пустую строку (возможно, слишком мало места).');
         break;
       }
 
+      // ДОБАВЛЯЕМ СТРАНИЦУ
       pages.add(pageText);
-      pageNumber++;
 
-      print('Текущий индекс абзаца: $_usedParagraphsCount из ${_cachedParagraphs!.length}');
-    }
-    print('=== ИЗМЕНЕННЫЙ массив параграфов: длинна ${_cachedParagraphs!.length} ===');
-    for(int i = 0; i < _cachedParagraphs!.length; i++){
-      print("parag[$i] " + _cachedParagraphs![i]);
-    }
-    print('=== ПОЛУЧЕНО СТРАНИЦ: ${pages.length} ===');
-    for(int i = 0; i < pages.length; i++){
-      print("page[${i+1}] " + pages[i]);
-    }
-    return pages;
-  }
+      String newRemainingText = remainingText.substring(pageText.length);
 
-  /// Строим страницу из уже найденных абзацев
-  String _buildPageContentFromParagraphs({
-    required double availableWidth,
-    required double availableHeight,
-    required TextStyle textStyle,
-  }) {
-    print('Построение страницы из абзацев, начиная с индекса: $_usedParagraphsCount');
 
-    String currentPageText = '';
-
-    for (int i = _usedParagraphsCount; i < _cachedParagraphs!.length; i++) {
-      final paragraph = _cachedParagraphs![i];
-      final testText = currentPageText + paragraph;
-
-      print('\nАБЗАЦ ${i + 1}:');
-      print('   Текст: "$paragraph"');
-
-      if (_fitsInPage(
-        text: testText,
-        availableWidth: availableWidth,
-        availableHeight: availableHeight,
-        textStyle: textStyle,
-      )) {
-        currentPageText = testText;
-        // УВЕЛИЧИВАЕМ счетчик использованных абзацев
-        _usedParagraphsCount = i + 1;
-      } else {
-        print('paragraph not vlez: "$paragraph"');
-        List<String> words = paragraph.split(RegExp(r'(?=\n)|(?<=\n)| '));
-        String trimmedText = '';
-        String notVlezli = "";
-
-        for(int i = words.length - 1; i > 0; i--){
-          List<String> currentWords = words.sublist(0, i);
-          String strJoint = currentWords.join(' ');
-          trimmedText = currentPageText + strJoint;
-
-          if (_fitsInPage(
-            text: trimmedText,
-            availableWidth: availableWidth,
-            availableHeight: availableHeight,
-            textStyle: textStyle,
-          )) {
-            // Сохраняем слова которые НЕ вошли
-            List<String> notUsedWords = words.sublist(i);
-            notVlezli = notUsedWords.join(' ').replaceAll(RegExp(r'^\n+'), '');
-            break;
-          } else {
-            trimmedText = "";
-          }
-        }
-        _usedParagraphsCount = i + 1;
-        print('words vlezli: \n"${trimmedText}"');
-        currentPageText = trimmedText;
-        if (notVlezli.isNotEmpty) {
-          _cachedParagraphs!.insert(i + 1, notVlezli);
-          print('words NE vlezli: ${notVlezli == "\n" ? "\\n" : notVlezli}');
-          print('words NE vlezli for chach ${i+1}: ${_cachedParagraphs![i+1] == "\n" ? "\\n" : notVlezli}');
-        }
+      int index = 0;
+      while (index < newRemainingText.length && whitespaceCharacters.contains(newRemainingText[index])) {
+        index++;
+      }
+      remainingText = newRemainingText.substring(index);
+      if (remainingText.isEmpty && pageNumber < pages.length) {
         break;
       }
-    }
-    return currentPageText.replaceAll(RegExp(r'\n+$'), '');
-  }
-
-  /// Получаем все абзацы из текста
-  List<String> _getAllParagraphs(String text, int startPosition) {
-    print('\n📖 ПОИСК И ОЧИСТКА АБЗАЦЕВ:');
-
-    final paragraphs = text.split("\n\n")
-        .map((paragraph) => "   " + paragraph + "\n\n")
-        .toList();
-    for(int i = 0; i < paragraphs.length; i++){
-      print("parag[$i] " + paragraphs[i]);
+      pageNumber++;
     }
 
-    print('📊 ИТОГО: ${paragraphs.length} абзацев\n');
-    return paragraphs;
+    return PaginationResult(
+      pages: pages,
+      targetPageIndex: 0,
+    );
   }
 
-  /// Проверяет, помещается ли текст в доступную область
-  bool _fitsInPage({
+  // ЗАДАЧА 1: Вычисляем высоту одной строки
+  double _calculateLineHeight(TextStyle textStyle) {
+    final textPainter = TextPainter(
+      text: TextSpan(text: "A", style: textStyle),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    );
+
+    textPainter.layout(maxWidth: double.infinity);
+    return textPainter.size.height;
+  }
+
+  // ЗАДАЧА 1: Вычисляем максимальное количество строк
+  int _calculateMaxLines(double availableHeight, double lineHeight) {
+    return (availableHeight / lineHeight).floor();
+  }
+
+  // ЗАДАЧА 2: Извлекаем текст для одной страницы
+  String _extractPageText({
     required String text,
     required double availableWidth,
-    required double availableHeight,
+    required int maxLines,
     required TextStyle textStyle,
   }) {
-    if (text.isEmpty) return true;
-    print('\nТекст:: \n"${text}"');
     final textPainter = TextPainter(
       text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.justify,
+      maxLines: maxLines,
     );
 
     textPainter.layout(maxWidth: availableWidth);
 
-    final bool fits = textPainter.height <= availableHeight;
-    print('   Проверка текста (${text.length} символов): '
-        'высота = ${textPainter.height.toStringAsFixed(1)} / $availableHeight '
-        '→ ${fits ? 'ПОМЕЩАЕТСЯ' : 'НЕ ПОМЕЩАЕТСЯ'}');
+    // Если текста меньше, чем может уместиться - возвращаем весь текст
+    if(!textPainter.didExceedMaxLines){
+      return text;
+    }
 
-    return fits;
+    final TextPosition position = textPainter.getPositionForOffset(
+        Offset(availableWidth, textPainter.size.height)
+    );
+
+    final int offset = position.offset;
+
+    if (offset == 0) {
+      // Если offset = 0, значит, даже один символ не поместился.
+      return '';
+    }
+
+    final int safeOffset = offset > 0 ? offset - 1 : 0;
+
+    final TextRange lastLineBoundary = textPainter.getLineBoundary(TextPosition(offset: safeOffset));
+    final int localEndIndex = lastLineBoundary.end;
+
+    // Гарантируем, что индекс корректен
+    if (localEndIndex > 0 && localEndIndex <= text.length) {
+      return text.substring(0, localEndIndex);
+    } else if (localEndIndex == 0 && text.isNotEmpty) {
+      // Если localEndIndex = 0, значит, даже одна строка не поместилась,
+      // или это граница пустой строки. Возвращаем пустую строку для
+      // завершения цикла пагинации.
+      return '';
+    } else {
+      // Запасной вариант для некорректных localEndIndex (например, -1)
+      return '';
+    }
+
+    // Ваша предыдущая (и менее точная) логика для FlowLayout:
+    /*
+    final position = textPainter.getPositionForOffset(
+        Offset(availableWidth, textPainter.size.height)
+    );
+    final pageText = text.substring(0, position.offset);
+    return pageText;
+    */
   }
 }
-
