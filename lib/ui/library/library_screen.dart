@@ -7,14 +7,13 @@ import 'package:mangalibrary/core/services/app_info_service.dart';
 import 'package:mangalibrary/ui/book_details_screen/book_details_screen.dart';
 import 'package:mangalibrary/ui/library/BookTags.dart';
 import 'package:provider/provider.dart';
-import '../../core/data/mock_schedule_data.dart';
 import '../../domain/models/book.dart';
 import '../../core/data/mock_data.dart';
 import '../../domain/models/schedule.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'time_provider.dart';
 import 'package:mangalibrary/ui/add_book_dialog/add_book_dialog.dart';
-import 'package:mangalibrary/core/services/open_library_service.dart';
+import 'package:mangalibrary/ui/library/open_library_search_widget.dart';
 
 
 class LibraryScreen extends StatefulWidget {
@@ -28,15 +27,11 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateMixin {
   int _currentIndex = 0;
   final List<Book> _bookList = [];
-  final List<ScheduleItem> _scheduleList = MockScheduleData.getMockSchedule();
   Timer? _timer;
   String textAppInfo = 'Загрузка...';
   bool _isExporting = false;
   String _exportStatus = '';
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  final OpenLibraryService _service = OpenLibraryService();
-  late Future<List<OpenLibraryBook>> _booksFuture;
-
   final BooksTable _booksTable = BooksTable();
   final ChapterTable _chaptersTable = ChapterTable();
 
@@ -44,13 +39,11 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   List<Book> _filteredBookList = [];
-  List<ScheduleItem> _filteredScheduleList = [];
 
   @override
   void initState() {
     super.initState();
     _filteredBookList = _bookList;
-    _filteredScheduleList = _scheduleList;
     _loadAppVersion();
     _startAutoRefresh();
     _loadLibraryData();
@@ -64,28 +57,20 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         if (book.id != null) {
           // Загружаем главы по ID книги
           final chapters = await _chaptersTable.getChaptersByVolumeId(book.id!);
-
-          // Присваиваем загруженные главы объекту Book
-          // book.volumes = chapters; //TODO надо будет переделать
         }
       }
 
       setState(() {
-        // ВАЖНО: полностью очищаем список перед добавлением книг из БД
         _bookList.clear();
         _bookList.addAll(booksFromDb);
         _filteredBookList = List.from(_bookList);
       });
 
       if (_bookList.isEmpty) {
-//         print('База пуста, загружается тестовая книга.');
         _addMockDataForTesting();
       } else {
-//         print('Загружено книг из БД: ${_bookList.length}');
       }
     } catch (e) {
-//       print('Ошибка загрузки из базы: $e');
-      // Только в случае ошибки добавляем тестовые данные
       _addMockDataForTesting();
     }
   }
@@ -95,7 +80,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       _bookList.clear();
       _bookList.addAll(MockData.getMockManga());
       _filteredBookList = List.from(_bookList);
-//       print('Добавлено тестовых книг: ${_bookList.length}');
     });
   }
 
@@ -136,26 +120,9 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     });
   }
 
-  // Метод поиска для расписания
-  void _searchSchedule(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredScheduleList =  List.from(_scheduleList);
-      } else {
-        _filteredScheduleList = _scheduleList.where((item) {
-          return item.title.toLowerCase().contains(query.toLowerCase()) ||
-              item.magazine.toLowerCase().contains(query.toLowerCase());
-        }).toList();
-      }
-    });
-  }
-
-  // Общий метод поиска
   void _search(String query) {
     if (_currentIndex == 0) {
       _searchManga(query);
-    } else {
-      _searchSchedule(query);
     }
   }
 
@@ -166,7 +133,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       if (!_isSearching) {
         _searchController.clear();
         _filteredBookList = List.from(_bookList);
-        _filteredScheduleList = List.from(_scheduleList);
       }
     });
   }
@@ -175,51 +141,55 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: _isSearching ? TextField( controller: _searchController,
-                              autofocus: true,
-                              decoration: const InputDecoration(
-                                hintText: 'Поиск...',
-                                border: InputBorder.none,
-                                hintStyle: TextStyle(color: Colors.grey),
-                                // prefixIcon: Icon(Icons.search, color: Colors.grey),
-                              ),
-                              style: const TextStyle(color: Colors.black, fontSize: 16),
-                              cursorColor: Colors.deepPurple,
-                              onChanged: _search,
+        title: _isSearching && _currentIndex == 0
+            ? TextField(
+          controller: _searchController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Поиск...',
+            border: InputBorder.none,
+            hintStyle: TextStyle(color: Colors.grey),
+          ),
+          style: const TextStyle(color: Colors.black, fontSize: 16),
+          cursorColor: Colors.deepPurple,
+          onChanged: _search,
         )
-                            : const Text('Главная'),
-                  actions: [ if (_isSearching)
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: _toggleSearch,
-                              )
-                            else
-                              IconButton(
-                                icon: const Icon(Icons.search),
-                                onPressed: _toggleSearch,
-                              ),
-                            if (!_isSearching)
-                              IconButton(
-                                icon: const Icon(Icons.info_outline),
-                                onPressed: _showAppInfo3,
-                              ),
-                  ],
+            : Text(_currentIndex == 0 ? 'Главная' : 'Поиск книг'),
+        actions: [
+          if (_isSearching && _currentIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _toggleSearch,
+            )
+          else if (_currentIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: _toggleSearch,
+            ),
+          if (!_isSearching)
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: _showAppInfo3,
+            ),
+        ],
       ),
       body: Column(
         children: [
-          // Блок времени с переключением
-          _buildTimeWidget(),
-          const SizedBox(height: 16),
+          // Блок времени с переключением (только для библиотеки)
+          if (_currentIndex == 0) ...[
+            _buildTimeWidget(),
+            const SizedBox(height: 16),
+          ],
 
-          // Табы библиотека/расписание
+          // Табы библиотека/поиск книг
           _buildTabBar(),
           const SizedBox(height: 16),
 
           // Заголовок в зависимости от выбранной вкладки
-          _buildHeader(),
+          if (_currentIndex == 0) _buildHeader(),
           const SizedBox(height: 16),
 
-          // Контент - либо библиотека, либо расписание
+          // Контент - либо библиотека, либо поиск книг
           _buildContent(),
         ],
       ),
@@ -274,6 +244,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     );
   }
 
+
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -284,7 +255,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _buildTab('РАСПИСАНИЕ', 1),
+            child: _buildTab('ПОИСК КНИГ', 1),
           ),
         ],
       ),
@@ -299,7 +270,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
           if (_isSearching) {
             _searchController.clear();
             _filteredBookList = _bookList;
-            _filteredScheduleList = _scheduleList;
           }
         });
       },
@@ -326,9 +296,9 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Text(
-            _currentIndex == 0 ? 'МОЯ БИБЛИОТЕКА' : 'РАСПИСАНИЕ ВЫХОДОВ',
-            style: const TextStyle(
+          const Text(
+            'МОЯ БИБЛИОТЕКА',
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
@@ -352,7 +322,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     return Expanded(
       child: _currentIndex == 0
           ? _buildLibraryContent()
-          : _buildScheduleContent(),
+          : const OpenLibrarySearchWidget(), // Заменяем расписание на поиск книг
     );
   }
 
@@ -386,177 +356,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
     );
   }
 
-  // Контент расписания
-  Widget _buildScheduleContent() {
-    final thisWeekSchedule = _filteredScheduleList.where((item) {
-      final difference = item.releaseDate
-          .difference(DateTime.now())
-          .inDays;
-      return difference <= 7;
-    }).toList();
-
-    final futureSchedule = _filteredScheduleList.where((item) {
-      final difference = item.releaseDate
-          .difference(DateTime.now())
-          .inDays;
-      return difference > 7;
-    }).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildScheduleSection(
-            title: 'НА ЭТОЙ НЕДЕЛЕ',
-            schedule: thisWeekSchedule,
-          ),
-          const SizedBox(height: 24),
-          _buildScheduleSection(
-            title: 'БУДУЩИЕ ВЫХОДЫ',
-            schedule: futureSchedule,
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScheduleSection({
-    required String title,
-    required List<ScheduleItem> schedule,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (schedule.isEmpty)
-          const Text(
-            'Ничего не найдено',
-            style: TextStyle(color: Colors.grey),
-          )
-        else
-          ...schedule.map((item) => _buildScheduleItem(item)).toList(),
-      ],
-    );
-  }
-
-  Widget _buildScheduleItem(ScheduleItem item) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _getStatusColor(item),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _getStatusIcon(item),
-              color: Colors.white,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _getDayLabel(item),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _getStatusColor(item),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  item.chapter,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                        Icons.access_time, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      item.time,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(Icons.menu_book, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      item.magazine,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-                if (!item.isToday && !item.isTomorrow) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    item.daysLeft,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getDayLabel(ScheduleItem item) {
-    if (item.isToday) return '🔥 Сегодня';
-    if (item.isTomorrow) return '📖 Завтра';
-    return '🎯 ${_formatDate(item.releaseDate)}';
-  }
-
   Color _getMangaStatusColor(String status) {
     switch (status) {
       case 'Читаю':
@@ -571,23 +370,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
         return Colors.grey;
     }
   }
-
-  Color _getStatusColor(ScheduleItem item) {
-    if (item.isToday) return Colors.red;
-    if (item.isTomorrow) return Colors.orange;
-    return Colors.blue;
-  }
-
-  IconData _getStatusIcon(ScheduleItem item) {
-    if (item.isToday) return Icons.flash_on;
-    if (item.isTomorrow) return Icons.today;
-    return Icons.calendar_today;
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}.${date.month}.${date.year}';
-  }
-
   // Методы библиотеки
   Widget _buildBookCard(Book book) {
     return Card(
