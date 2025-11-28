@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:mangalibrary/domain/models/book.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -21,6 +22,78 @@ class BookImportResult{
 }
 
 class FileService{
+
+  // ОПРЕДЕЛЯЕМ ТИП КНИГИ ПО РАСШИРЕНИЮ ФАЙЛА
+  static BookType determineBookType(String filePath) {
+    // path.extension получает расширение файла: .cbz, .epub и т.д.
+    final extension = path.extension(filePath).toLowerCase();
+
+    // switch проверяет расширение и возвращает соответствующий BookType
+    switch (extension) {
+      case '.cbz':
+      case '.cbr':
+      case '.zip':
+        return BookType.manga;  // Это манга
+      case '.epub':
+      case '.txt':
+      case '.fb2':
+        return BookType.text;
+      case '.pdf':// Это текстовая книга
+      default:
+        return BookType.text;   // По умолчанию считаем текстовой
+    }
+  }
+
+// 2. КОПИРОВАНИЕ ФАЙЛА ГЛАВЫ (Обновленный)
+  static Future<File> copyChapterFile({
+    required String sourceFilePath,
+    required Book book,
+    required String volumeTitle,
+    required String chapterTitle,
+    int fileIndex = 1, // Для сегментации, по умолчанию 1
+  }) async {
+    final targetPath = book.getChapterFilePath(
+      volumeTitle: volumeTitle,
+      chapterTitle: chapterTitle,
+      fileIndex: fileIndex,
+    );
+    final sourceFile = File(sourceFilePath);
+
+    if (!(await sourceFile.exists())) {
+      throw FileSystemException('Исходный файл не найден: $sourceFilePath');
+    }
+
+    // Убеждаемся, что целевая папка главы существует: books/Книга/Том/Глава/
+    final targetDir = Directory(path.dirname(targetPath));
+    if (!(await targetDir.exists())) {
+      await targetDir.create(recursive: true);
+    }
+
+    // Копируем файл
+    final newFile = await sourceFile.copy(targetPath);
+    return newFile;
+  }
+
+  static Future<String> readChapterContent({
+    required Book book,
+    required String volumeTitle,
+    required String chapterTitle,
+    int fileIndex = 1,
+  }) async {
+    final filePath = book.getChapterFilePath(
+      volumeTitle: volumeTitle,
+      chapterTitle: chapterTitle,
+      fileIndex: fileIndex,
+    );
+    final file = File(filePath);
+
+    if (!(await file.exists())) {
+      throw FileSystemException('Файл главы не найден: $filePath');
+    }
+
+    return await file.readAsString();
+  }
+
   static Future<Directory> getBooksDirectory() async {
 
     final appDir = await getApplicationDocumentsDirectory();
@@ -32,16 +105,24 @@ class FileService{
     return bookDir;
   }
 
-  static String _sanitizeFileName(String name) {
-    // Заменяем недопустимые символы в именах файлов на _
-    return name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+  static Future<Directory> getBooksVolume(Book book, String titleVolume) async {
+
+    final appDir = book.fileFolderPath;
+    final bookDir = Directory('$appDir/$titleVolume');
+    print("getBooksVolume bookDir^ $bookDir");
+
+    if(!await bookDir.exists()){
+      await bookDir.create(recursive: true);
+    }
+    return bookDir;
   }
 
-  static Future<Directory> getBookDirectory(String bookTitle) async {
-    final booksDir = await getBooksDirectory();
-    final bookDir = Directory('${booksDir.path}/${_sanitizeFileName(bookTitle)}');
+  static Future<Directory> getBooksVolumeChapter(Book book, String titleVolume, String titleChapter) async {
 
-    if (!await bookDir.exists()) {
+    final appDir = book.fileFolderPath;
+    final bookDir = Directory('$appDir/${FileService.safePathName(titleVolume)}/${FileService.safePathName(titleChapter)}');
+
+    if(!await bookDir.exists()){
       await bookDir.create(recursive: true);
     }
     return bookDir;
@@ -73,8 +154,20 @@ class FileService{
 
     // 4. Копируем ВСЕ содержимое папки books
     await _copyAllContents(booksDir, exportDir);
-// 
+//
 //     print('✅ ЭКСПОРТ КНИГ ЗАВЕРШЕН!');
+  }
+
+  static String safePathName(String name) {
+    if (name.isEmpty) return 'unnamed';
+
+    final _name = name.replaceAll(RegExp(r'[<>:"/\\|?*,.]'), '_')  // Основные запрещенные символы
+        .replaceAll(RegExp(r"'"), '')          // Апострофы просто удаляем
+        .replaceAll(RegExp(r'\s+'), '_')           // Пробелы в подчеркивания
+        .trim();
+
+
+    return _name.isNotEmpty ? _name.substring(0, min(50,_name.length)) : "unnamed";                          // Убираем пробелы по краям
   }
 
   /// Копирует все содержимое папки с детальным логированием
@@ -128,7 +221,7 @@ class FileService{
           }
         }
       }
-// 
+//
 //       print('✅ КОПИРОВАНИЕ ЗАВЕРШЕНО: файлов=$filesCopied, папок=$foldersCreated');
 
     } catch (e) {
@@ -137,114 +230,12 @@ class FileService{
     }
   }
 
-  // ОПРЕДЕЛЯЕМ ТИП КНИГИ ПО РАСШИРЕНИЮ ФАЙЛА
-  static BookType _determineBookType(String filePath) {
-    // path.extension получает расширение файла: .cbz, .epub и т.д.
-    final extension = path.extension(filePath).toLowerCase();
-
-    // switch проверяет расширение и возвращает соответствующий BookType
-    switch (extension) {
-      case '.cbz':
-      case '.cbr':
-      case '.zip':
-        return BookType.manga;  // Это манга
-      case '.epub':
-      case '.txt':
-      case '.fb2':
-        return BookType.text;
-      case '.pdf':// Это текстовая книга
-      default:
-        return BookType.text;   // По умолчанию считаем текстовой
-    }
-  }
-
-  static Future<BookImportResult> importBook(String sourcePath, String bookTitle) async {
-    try{
-      final sourceFile = File(sourcePath);
-      if (!await sourceFile.exists()) {
-        throw Exception('Исходный файл не существует');
-      }
-      // Определяем тип книги
-      final BookType bookType = _determineBookType(sourcePath);
-      // Получаем папку для этой книги
-      final bookDir = await getBookDirectory(bookTitle);
-
-      // Копируем файл в папку книги
-      final fileName = path.basename(sourcePath); // Получаем имя файла
-      final destinationPath = '${bookDir.path}/$fileName';
-
-      final destinationFile = File(destinationPath);
-      if (await destinationFile.exists()) {
-        throw Exception('Файл "$fileName" уже существует в библиотеке');
-      }
-
-      final copiedFile = await sourceFile.copy(destinationPath);
-
-      clearFilePickerCache();
-
-      // Получаем размер файла
-      final fileSize = await copiedFile.length();
-
-      // ЕСЛИ ЭТО МАНГА - создаем папку chapters
-      if (bookType == BookType.manga) {
-        await _createChaptersDirectory(bookTitle);
-      }
-      return BookImportResult(
-        bookPath: bookDir.path,
-        filePath: copiedFile.path,
-        bookType: bookType,
-        fileSize: fileSize,
-      );
-    }catch (e) {
-//       print('Ошибка импорта книги: $e');
-      rethrow; // Перебрасываем ошибку дальше
-    }
-  }
-
-  // Создаем папку chapters для манги
-  static Future<Directory> _createChaptersDirectory(String bookTitle) async {
-    final bookDir = await getBookDirectory(bookTitle);
-    final chaptersDir = Directory('${bookDir.path}/chapters');
-
-    if (!await chaptersDir.exists()) {
-      await chaptersDir.create(recursive: true);
-    }
-    return chaptersDir;
-  }
-
-  static Future<Map<String, dynamic>> getBookFileInfo(String bookTitle) async {
-    final bookDir = await getBookDirectory(bookTitle);
-    final files = bookDir.listSync(); // Получаем список файлов в папке
-
-    // Ищем основной файл книги (первый файл в папке)
-    for (var file in files) {
-      if (file is File) {
-        final filePath = file.path;
-        return {
-          'filePath': filePath,
-          'fileFormat': path.extension(filePath).replaceFirst('.', ''), // Убираем точку
-          'fileSize': await file.length(),
-          'bookType': _determineBookType(filePath),
-        };
-      }
-    }
-
-    throw Exception('Файл книги не найден в папке $bookTitle');
-  }
 
   static Future<void> deleteBookFiles(Book book) async {
-    try{
-      final bookDir = await FileService.getBookDirectory(book.title);
-      // Проверяем существует ли папка
-      if (await bookDir.exists()) {
-        // Удаляем всю папку с содержимым рекурсивно
-        await bookDir.delete(recursive: true);
-//         print('Папка книги удалена: ${bookDir.path}');
-      } else {
-//         print('Папка книги не существует: ${bookDir.path}');
-      }
-    }catch(e){
-//       print('Ошибка при удалении файлов книги: $e');
+    final bookDir = Directory(book.fileFolderPath);
+    if (await bookDir.exists()) {
+      await bookDir.delete(recursive: true);
+      // print('✅ Папка книги "${book.title}" успешно удалена.');
     }
   }
 
@@ -255,8 +246,6 @@ class FileService{
       final appPath = appDir.parent.path; // Поднимаемся на уровень выше
 
       final cacheDir = Directory('$appPath/cache/file_picker');
-//       print("путь до кэша: ${cacheDir.path}");
-//       print("путь до кэша существует: ${await cacheDir.exists()}");
 
       if (await cacheDir.exists()) {
         // Сначала посмотрим что внутри
@@ -271,5 +260,162 @@ class FileService{
     } catch (e) {
 //       print('❌ Ошибка очистки кеша файлового пикера: $e');
     }
+  }
+
+  static Future<void> writeChapterFile({
+    required String content,
+    required Book book,
+    required String volumeTitle,
+    required String chapterTitle,
+    required int fileIndex,
+  }) async {
+    final String chapterFolderPath = book.getChapterFolderPath(
+      volumeTitle: volumeTitle,
+      chapterTitle: chapterTitle,
+    );
+    final String chapterFilePath = path.join(chapterFolderPath, 'segment_$fileIndex.txt');
+
+    // Создаем папку, если не существует
+    await Directory(chapterFolderPath).create(recursive: true);
+
+    // Записываем content в файл
+    await File(chapterFilePath).writeAsString(content);
+  }
+
+  static String formatWithLeadingZeros(int number, {int totalDigits = 3}) {
+    return number.toString().padLeft(totalDigits, '0');
+  }
+
+  static const String indent = '\u00A0\u00A0\u00A0\u00A0\u00A0';
+
+  static String formatBookTextOptimized(String text) {
+    if (text.isEmpty) return text;
+
+    // 1. Очистка и Нормализация
+    String cleanText = text
+        .replaceAll('\r', '') // Убираем Windows-перенос
+        .replaceAll('\t', ' ') // Убираем табуляцию
+        .replaceAll(RegExp(r'[ \u00A0]+'), ' '); // Схлопываем множественные пробелы
+
+    // 2. Разбиваем на строки и очищаем каждую от лишних пробелов по краям.
+    List<String> lines = cleanText.split('\n').map((e) => e.trim()).toList();
+
+    final buffer = StringBuffer();
+    bool needsIndent = true;
+
+    for (int i = 0; i < lines.length; i++) {
+      String currentLine = lines[i];
+
+      // 3. Обработка пустых строк (множественные \n в исходнике)
+      if (currentLine.isEmpty) {
+        if (!needsIndent) {
+          buffer.write('\n'); // Добавляем фактический перенос
+          needsIndent = true; // Устанавливаем флаг для отступа
+        }
+        continue;
+      }
+
+      // 4. Обработка начала нового абзаца (первая строка или после множественных \n)
+      if (needsIndent) {
+        if (buffer.isNotEmpty) buffer.write('\n'); // Если буфер не пуст, добавляем перенос
+        buffer.write(indent);
+        buffer.write(currentLine);
+        needsIndent = false;
+      } else {
+        // 5. Обработка одиночного \n (склеить или начать новый абзац)
+        String prevLine = lines[i - 1];
+
+        if (_shouldStartNewParagraph(prevLine, currentLine)) {
+          // Начинаем новый абзац
+          buffer.write('\n');
+          buffer.write(indent);
+          buffer.write(currentLine);
+        } else {
+          // Склеиваем с пробелом
+          buffer.write(' ');
+          buffer.write(currentLine);
+        }
+      }
+    }
+
+    return buffer.toString();
+  }
+
+  // --- Вспомогательные функции ---
+
+  /**
+   * Принимает решение: должен ли одиночный \n превратиться в \n + отступ (true) или в пробел (false).
+   */
+  static bool _shouldStartNewParagraph(String prev, String curr) {
+    if (prev.isEmpty) return true; // Страховка
+
+    // 1. Проверка на Диалоги, Списки, Маркеры (Принудительный перенос)
+    // Если новая строка начинается с тире, цифры с точкой, маркера.
+    if (RegExp(r'^[—–-]|^\d+\.|^[•*]').hasMatch(curr)) {
+      return true;
+    }
+
+    // 2. Проверка на Заголовки (Эвристика)
+    // Если предыдущая строка вся в CAPS LOCK и короткая (вероятно, заголовок).
+    bool isPrevCaps = prev == prev.toUpperCase() && prev != prev.toLowerCase();
+    if (isPrevCaps && prev.length < 60) return true;
+
+    // 3. Проверка конца предложения (Точка, Воскл. знак и т.д.)
+    final lastChar = prev[prev.length - 1];
+    const terminators = {'.', '!', '?', '…', '»', '"', '”'};
+
+    bool endsWithTerminator = terminators.contains(lastChar);
+
+    if (!endsWithTerminator) {
+      // Если строка не кончается точкой/терминатором - склеиваем (пробел)
+      return false;
+    }
+
+    // 4. Умная проверка Сокращений и Инициалов (Предотвращение ложного разрыва)
+    // Если строка кончается на точку, но это "г." или "Д.Б." - это НЕ конец абзаца.
+    if (_isAbbreviation(prev)) {
+      return false;
+    }
+
+    // Если ничего из вышеперечисленного - считаем, что это конец предложения и нужен новый абзац.
+    return true;
+  }
+
+  /**
+   * Определяет, является ли последнее "слово" в строке сокращением или инициалами.
+   */
+  static bool _isAbbreviation(String line) {
+    if (line.isEmpty) return false;
+
+    // Извлекаем последнее "слово" (включая точку) для анализа.
+    int lastSpace = line.lastIndexOf(' ');
+    String candidate = (lastSpace == -1) ? line : line.substring(lastSpace + 1).trim();
+
+    if (!candidate.endsWith('.')) {
+      return false;
+    }
+
+    // Проверка на фиксированный список сокращений (Case-insensitive)
+    const abbreviations = {
+      // Русские
+      'г.', 'ул.', 'д.', 'кв.', 'проф.', 'им.', 'т.', 'п.', 'с.', 'пос.', 'обл.', 'ст.', 'в.', 'гг.',
+      'пр.', 'д-р.', 'кан.', 'доц.', 'см.', 'и т.д.', 'и т.п.', 'т.е.',
+      // Английские
+      'mr.', 'mrs.', 'dr.', 'ms.', 'jr.', 'sr.', 'p.', 's.', 'e.g.', 'i.e.', 'etc.'
+    };
+    if (abbreviations.contains(candidate.toLowerCase())) {
+      return true;
+    }
+
+    // Проверка на инициалы (например, А. или А.С., F.W.)
+    // Убираем точку в конце для чистой проверки:
+    String noDotCandidate = candidate.substring(0, candidate.length - 1);
+
+    // Ищем одну или две заглавные буквы (Кириллица [А-Я], Латиница [A-Z])
+    if (RegExp(r'^[А-ЯA-Z]{1,2}$').hasMatch(noDotCandidate)) {
+      return true;
+    }
+
+    return false;
   }
 }

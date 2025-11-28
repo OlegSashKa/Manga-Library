@@ -108,13 +108,13 @@ class EpubParserUtils {
       final int newChapterPagesCount = chapterPages.length;
 
       // 4. Добавляем главу в плоский список
-      // Важно: startPage и endPage - это индексы в List<String> allBookPages
       chapters.add(VolumeChapter(
-        bookId: idBook, // ID будет присвоен позже
+        volumeId: idBook, // ID будет присвоен позже
         title: epubChapter.title?.trim() ?? 'Глава без названия',
         startPage: startPageIndex,
         endPage: startPageIndex + newChapterPagesCount - 1, // Конечный индекс
         position: chapters.length, // Позиция в плоском списке
+        fileFolderPath: ' '
       ));
 
       // 5. Добавляем страницы главы в общий список

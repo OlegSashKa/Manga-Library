@@ -3,6 +3,7 @@ import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/services/app_utils.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
+import 'package:mangalibrary/domain/models/book_volume.dart';
 import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/chapter_section.dart';
@@ -26,96 +27,114 @@ class BookDetailsScreen extends StatefulWidget {
 
 class _BookDetailsScreenState extends State<BookDetailsScreen> {
   late Book _currentBook;
-  List<VolumeChapter> _chapters = [];
-  bool _isLoading = false;
+
   final BooksTable _booksTable = BooksTable();
+
+  late final Future<Book> _bookFuture = _booksTable.getFullBookDetails(widget.book.id!);
+
+  BookVolume? get currentVolume {
+    // Используем ранее созданные геттеры из модели Book
+    return _currentBook.currentVolume;
+  }
+
+  VolumeChapter? get currentChapter {
+    // Используем ранее созданные геттеры из модели Book
+    return _currentBook.currentChapter;
+  }
 
   @override
   void initState() {
     super.initState();
     _currentBook = widget.book;
-    print('initState DetaislBook chaters: ${_currentBook.chapters.length}');
-    _loadBookData(); // Загружаем основные данные
   }
 
-  Future<void> _loadBookData({bool initialLoad = false}) async { // initialLoad - опциональный флаг
-    if (_currentBook.id == null) return;
-
-    // Если это не первая загрузка, показываем индикатор
-    if (!initialLoad) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
-
-    // 1. Вызываем метод, который теперь ВОЗВРАЩАЕТ КНИГУ С ГЛАВАМИ
-    final updatedBook = await _booksTable.getBookById(_currentBook.id!);
-
-    if (updatedBook != null) {
-      setState(() {
-        _currentBook = updatedBook; // _currentBook теперь содержит главы
-        _isLoading = false;
-        print('✅ _loadBookData: Книга обновлена. Глав: ${_currentBook.chapters?.length ?? 0}');
-      });
-    } else {
-      // ... обработка ошибки
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  // Future<Book> _loadBookData() async {
+  //   try {
+  //     // 💡 Загружаем книгу с полной гидратацией (с Томами и Главами)
+  //     final loadedBook = await _booksTable.getBookById(widget.book.id!);
+  //
+  //     // 💡 Обновляем состояние после успешной загрузки
+  //     setState(() {
+  //       if (loadedBook != null) {
+  //         _currentBook = loadedBook;
+  //       }
+  //     });
+  //     return _currentBook;
+  //   } catch (e) {
+  //     // ⚠️ Если была ошибка БД, нужно обработать.
+  //     // Главное: установить _isLoading = false, чтобы избежать вечного прогресса.
+  //     AppGlobals.showError('Не удалось загрузить данные книги: $e');
+  //     return _currentBook;
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context){
-    final book = _currentBook;
-    print('build DetaislBook chaters: ${book.chapters.length}');
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Детали книги"),
-        actions: [
-          PopupMenuButton(
-            onSelected: (value){
-              _handleMenuSelection(value, context, book);
-            },
-            itemBuilder: (BuildContext context) {
-              return[
-                PopupMenuItem<String>(
-                  value: 'about',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 20),
-                      SizedBox(width: 8),
-                      Text('Информация о книге'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete_outline, size: 20),
-                      SizedBox(width: 8),
-                      Text('Удалить'),
-                    ],
-                  ),
-                ),
-              ];
-            },
-          )
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildHeaderSection(book),
-          SizedBox(height: 24),
-          _buildReadingButton(context, book),
-          SizedBox(height: 8),
-          _buildChapterSection(book),
-          SizedBox(height: 12),
-        ],
-      ),
+    return FutureBuilder<Book>(
+      future: _bookFuture,
+      builder: (context, snapshot) {
+        if(snapshot.connectionState == ConnectionState.waiting){
+          return Center(child: CircularProgressIndicator());
+        }
+        if(snapshot.hasError){
+          return Center(child: Text('Ошибка ${snapshot.error}', style: TextStyle(fontSize: 12)));
+        }
+        if(snapshot.hasData){
+          final book = snapshot.data!;
+          return Scaffold(
+            appBar: AppBar(
+              title: Text("Детали книги"),
+              actions: [
+                PopupMenuButton(
+                  onSelected: (value){
+                    _handleMenuSelection(value, context, book);
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return[
+                      PopupMenuItem<String>(
+                        value: 'about',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 20),
+                            SizedBox(width: 8),
+                            Text('Информация о книге'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 20),
+                            SizedBox(width: 8),
+                            Text('Удалить'),
+                          ],
+                        ),
+                      ),
+                    ];
+                  },
+                )
+              ],
+            ),
+            body: Column(
+              children: [
+                //TODO здесь информаци подгружаеться верная
+                _buildHeaderSection(book),
+                SizedBox(height: 24),
+                //TODO в этом коде есть причина по которой кнопка имеет анимацию загрузки, если нет укажи какой код скинуть
+                _buildReadingButton(context, book),
+                SizedBox(height: 8),
+                //TODO пишется правильный том, правильные страницы но пишется глава 0, хотя по идее номерация начинаетсься с 1
+                //TODO так же при развороте не риуються chapters
+                //TODO помоги прологировать что бы понять какие там данные
+                _buildChapterSection(book),
+                SizedBox(height: 12),
+              ],
+            ),
+          );
+        };
+        return Center(child: Text('Книга не найдена.'));
+      },
     );
   }
 
@@ -197,9 +216,9 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${(book.progress * 100).toInt()}% прочитано'),
+        Text('${(book.getProgress * 100).toInt()}% прочитано'),
         LinearProgressIndicator(
-          value: book.progress,
+          value: book.getProgress,
           backgroundColor: Colors.grey[300],
           color: book.statusColor,
           minHeight: 6,
@@ -253,41 +272,63 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   }
 
   Widget _buildReadingButton(BuildContext context, Book book) {
-    if (_isLoading) {
-      return Container(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: null,
-          style: FilledButton.styleFrom(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            backgroundColor: Colors.grey,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              SizedBox(width: 12),
-              Text(
-                'Загрузка...',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+    return FutureBuilder<Book>(
+      future: _bookFuture,
+      builder: (context, snapshot) {
+        // Пока загружаем - показываем кнопку с индикатором
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingButton();
+        }
+
+        // Если ошибка - показываем обычную кнопку
+        if (snapshot.hasError) {
+          print('❌ Ошибка загрузки данных для кнопки: ${snapshot.error}');
+          return _buildNormalButton(book);
+        }
+
+        // Если данные загружены - используем актуальную книгу
+        final updatedBook = snapshot.data!;
+        return _buildNormalButton(updatedBook);
+      },
+    );
+  }
+
+  Widget _buildLoadingButton() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: null,
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          backgroundColor: Colors.grey,
         ),
-      );
-    }
-    // Оригинальная кнопка когда не загружается
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Загрузка...',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNormalButton(Book book) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16),
       width: double.infinity,
@@ -327,10 +368,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     );
   }
 
+  //TODO работаем над эим методом
   void _startReading(BuildContext context, Book book, {int targetPage = -1}) async {
-//     print("BOOK_DETAILS_SCREEN:");
-//     print("Book currentPage: ${book.currentPage}");
-//     print("fileFormat ${book.fileFormat}");
     if (book.bookType == BookType.text) {
       // ✅ ПЕРЕДАЕМ КОЛБЭК ДЛЯ ПОЛУЧЕНИЯ ОБНОВЛЕННОЙ КНИГИ
       await Navigator.of(context).push<Book>(
@@ -341,8 +380,6 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           ),
         ),
       );
-      print('_startReading DetaislBook book chaters: ${book.chapters.first.isRead}');
-      await _loadBookData();
 
      // ✅ Принудительно обновляем состояние
      if (mounted) {
@@ -388,14 +425,31 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   }
 
   Widget _buildChapterSection(Book book){
-    print('_buildChapterSection DetaislBook _currentBook chaters: ${_currentBook.chapters.length}');
-    print('_buildChapterSection DetaislBook book chaters: ${book.chapters.length}');
+    print('📖 BOOK_DETAILS_SCREEN - _buildChapterSection:');
+    print('📖 Book ID: ${book.id}');
+    print('📖 Book title: ${book.title}');
+    print('📖 Volumes count: ${book.volumes.length}');
+    print('📖 Book pags: ${book.totalPages}');
+
+    for (int i = 0; i < book.volumes.length; i++) {
+      final volume = book.volumes[i];
+      print('📖 Volume $i: ${volume.title} (id: ${volume.id}) (start page: ${volume.startPage}) (end page: ${volume.endPage}) (count page: ${volume.endPage! - volume.startPage + 1})');
+      print('📖   Chapters count: ${volume.chapters.length}');
+
+      for (int j = 0; j < volume.chapters.length; j++) {
+        final chapter = volume.chapters[j];
+        print('📖   Chapter $j: ${chapter.title} (id: ${chapter.id})');
+        print('📖     startPage: ${chapter.startPage}, endPage: ${chapter.endPage}');
+        print('📖     volumeId: ${chapter.volumeId}, position: ${chapter.position}');
+      }
+    }
+
     return Expanded(
         child: Container(
           padding: EdgeInsets.all(16),
           child: ChapterSection(
             bookId: book.id!,
-            initialChapters: book.chapters,
+            initialVolumes: book.volumes,
             // 🔥 ПЕРЕДАЕМ КОЛЛБЭК, который вызывает _navigateToReaderScreen
             onChapterSelected: (targetPage) {
              _startReading(context, book, targetPage: targetPage);

@@ -9,7 +9,11 @@ class BookViewTable{
     final maps = await db.query('book_view_settings', limit: 1);
 
     if (maps.isEmpty) {
-      return BookView.defaultSettings();
+      // Создаем запись по умолчанию
+      final defaultSettings = BookView.instance;
+      final id = await db.insert('book_view_settings', defaultSettings.toMap());
+      defaultSettings.id = id;
+      return defaultSettings;
     }
 
     return BookView.fromMap(maps.first);

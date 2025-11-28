@@ -1,26 +1,24 @@
 // text_page_widget.dart - ШАГ 12 (полноэкранный со свайпом)
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:epub_pro/epub_pro.dart';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
-import 'package:mangalibrary/core/utils/epub_parser_utils.dart';
 import 'package:mangalibrary/core/utils/textPaginator.dart';
 import 'package:mangalibrary/domain/models/book.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
+import 'package:mangalibrary/domain/models/book_volume.dart';
+import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 
+//TODO класс надопеменять в соответсвии с нашим измененноый струкоурой кинг
 class TextPageWidget extends StatefulWidget {
-  final BookView bookView;
   final Book book;
   final VoidCallback? onScreenTap;
   final Function(bool totalPages)? onBookReady;
   final int? targetPage;
-
+  
   const TextPageWidget({
     super.key,
-    required this.bookView,
     required this.book,
     this.onScreenTap,
     this.onBookReady,
@@ -32,46 +30,35 @@ class TextPageWidget extends StatefulWidget {
 }
 
 class TextPageWidgetState extends State<TextPageWidget> {
+  BookView bookView = BookView.instance;
   String filePathToBook = "";
   List<String>? _pages;
   bool _isInitialized = false;
+  
   BoxConstraints? _constraints;
+  bool _hasConstraints = false;
+  Future<List<String>>? _paginationFuture;
+
   int _currentPageIndex = 0;
   PageController? _pageController;
-  String textInBook = "";
-  bool _isReady = false;
-  bool _isLoading = false;
-  bool _isPaginating = false;
-  bool _hasConstraints = false;
 
-  TextStyle get textStyle {
-    return TextStyle(
-      fontSize: widget.bookView.fontSize,
-      color: widget.bookView.getTextColor,
-      height: widget.bookView.lineHeight,
-      fontFamily: 'Roboto'
-    );
-  }
+  String textInBook = "";
+  Book? currentBook;
+  int currentTotalPage = 0;
+
+  TextStyle? textStyle;
 
   void reloadPages() {
-//     print('🔄 [TEXT_PAGE] Вызван reloadPages');
-
-    if (_constraints != null && _isReady) {
+    if (_constraints != null) {
       setState(() {
-        // _isInitialized = false;
         _pages = null;
-      });
-// 
-//       print('🔄 [TEXT_PAGE] Сброшена инициализация, запуск пагинации...');
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _isPaginating = true;
-          _loadAndPaginateText().then((_) {
-            _isPaginating = false;
-//             print('✅ [TEXT_PAGE] Перерисовка завершена. Страниц: ${_pages?.length}');
-          });
-        }
+        _paginationFuture = _loadAndPaginateText();
+        textStyle = TextStyle(
+            fontSize: bookView.fontSize,
+            color: bookView.getTextColor,
+            height: bookView.lineHeight,
+            fontFamily: 'Roboto'
+        );
       });
     }
   }
@@ -79,36 +66,28 @@ class TextPageWidgetState extends State<TextPageWidget> {
   @override
   void initState() {
     super.initState();
-//     print('📖 [TEXT_PAGE] Инициализация:');
-//     print("[initState]");
-    filePathToBook = widget.book.filePath;
-    final int maxIndex = widget.book.totalPages > 0 ? widget.book.totalPages - 1 : 0;
-    // AppGlobals.showInfo('инициализация text_page_widget ${widget.targetPage}');
-    if(widget.targetPage != null && widget.targetPage! > 1){
-      _currentPageIndex = widget.targetPage! - 1;
-    }else{
-      _currentPageIndex = (widget.book.currentPage - 1).clamp(0, maxIndex);
-    }
-// 
-//     print("_currentPageIndex: $_currentPageIndex");
+    currentTotalPage = widget.book.totalPages;
+    filePathToBook = widget.book.fileFolderPath;
+    currentBook = widget.book;
     _pageController = PageController(initialPage: _currentPageIndex);
-    _loadBookContent();
-    // _initializeBook();
+    textStyle = TextStyle(
+        fontSize: bookView.fontSize,
+        color: bookView.getTextColor,
+        height: bookView.lineHeight,
+        fontFamily: 'Roboto'
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Ждем когда виджет будет полностью готов и получит constraints
-    if (!_isInitialized && _isReady && !_isPaginating && _hasConstraints) {
+    if (!_isInitialized && _hasConstraints) {
       _isInitialized = true;
-      _isPaginating = true;
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _loadAndPaginateText().then((_) {
-            _isPaginating = false;
-          });
+          _loadAndPaginateText();
         }
       });
     }
@@ -116,35 +95,17 @@ class TextPageWidgetState extends State<TextPageWidget> {
 
   Future<void> _loadBookContent() async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
-
+      //TODO надо брать возмно не один файл надо или убрать или передалть или в другом местев for использовать
       final file = File(filePathToBook);
       if (!await file.exists()) {
         throw Exception('Файл книги не найден');
       }
 
       if (widget.book.fileFormat.toLowerCase() == 'txt') {
-        // --- ЛОГИКА ДЛЯ TXT ---
         textInBook = await file.readAsString();
-//         print('✅ Текст TXT успешно прочитан.');
       }
-      // Мы не можем читать EPUB в одну строку,
-      // поэтому не нужно заполнять textInBook.
-      // Логика EPUB будет полностью в _loadAndPaginateText.
-
-      setState(() {
-        _isReady = true;
-        _isLoading = false;
-      });
-
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        // Можно добавить флаг _hasError
-      });
-//       print('❌ Ошибка инициализации книги: $e');
+      print('❌ Ошибка инициализации книги: $e');
     }
 
     // Обновляем дату открытия
@@ -156,43 +117,91 @@ class TextPageWidgetState extends State<TextPageWidget> {
 
   void _updateChapterProgress(Book book) {
     final currentPage = book.currentPage;
-    if (widget.book.chapters.isEmpty) {
-      print("widget.book.chapters.isEmpty");
+
+    // Проверяем, есть ли тома и главы
+    if (book.volumes.isEmpty) {
+      print("📚 Нет томов для обновления прогресса");
       return;
     }
 
-    final int currentChapterIndex = widget.book.chapters.indexWhere(
-          (chapter) => currentPage >= chapter.startPage && currentPage <= chapter.endPage!,
-    );
-    print("currentChapterIndex = $currentChapterIndex");
-    if (currentChapterIndex == -1) {
-      print("currentChapterIndex == -1");
-      return;
-    }
-    // Обновляем прогресс для каждой главы
-    for (int i = 0; i < widget.book.chapters.length; i++) {
-      final chapter = widget.book.chapters[i];
+    print("🔄 Обновление прогресса глав для страницы: $currentPage");
 
-      if (i < currentChapterIndex) {
-        // 1. Главы, которые были ПОЛНОСТЬЮ ПРОЧИТАНЫ (перед текущей)
-        chapter.currentPage = chapter.endPage! - chapter.startPage + 1; // Устанавливаем макс. страницу
-        chapter.isRead = BookStatus.completed;
-      } else if (i == currentChapterIndex) {
-        // 2. ТЕКУЩАЯ ГЛАВА
-        final int chapterCurrentPage = currentPage - chapter.startPage + 1;
-        chapter.currentPage = chapterCurrentPage;
-        chapter.isRead = BookStatus.reading;
-      } else {
-        // 3. Главы, которые ЕЩЕ НЕ НАЧАТЫ
-        chapter.currentPage = 0;
-        chapter.isRead = BookStatus.planned;
+    // 🔥 ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩИЕ ГЕТТЕРЫ ИЗ BOOK
+    final currentVolume = book.currentVolume;
+    final currentChapter = book.currentChapter;
+
+    if (currentVolume != null) {
+      print("📖 Текущий том: ${currentVolume.title} (страницы ${currentVolume.startPage}-${currentVolume.endPage})");
+    } else {
+      print("⚠️ Не найден том для страницы $currentPage");
+    }
+
+    if (currentChapter != null) {
+      print("📖 Текущая глава: ${currentChapter.title} (страницы ${currentChapter.startPage}-${currentChapter.endPage})");
+    } else {
+      print("⚠️ Не найдена глава для страницы $currentPage");
+    }
+
+    // 🔥 Обновляем статусы всех глав на основе текущей главы
+    for (final volume in book.volumes) {
+      for (final chapter in volume.chapters) {
+        if (currentChapter != null) {
+          // Определяем статус главы на основе позиции относительно текущей
+          if (chapter.startPage < currentChapter.startPage) {
+            // Глава ДО текущей - полностью прочитана
+            chapter.isRead = BookStatus.completed;
+          } else if (chapter.startPage == currentChapter.startPage) {
+            // ТЕКУЩАЯ глава
+            chapter.isRead = BookStatus.reading;
+          } else {
+            // Глава ПОСЛЕ текущей - в планах
+            chapter.isRead = BookStatus.planned;
+          }
+        } else {
+          // Если текущая глава не найдена, все главы в планах
+          chapter.isRead = BookStatus.planned;
+        }
       }
-
     }
+
+    // 🔥 Логируем статистику
+    _logProgressStatistics(book);
+  }
+
+// 🔥 Дополнительный метод для логирования статистики
+  void _logProgressStatistics(Book book) {
+    int completedChapters = 0;
+    int readingChapters = 0;
+    int plannedChapters = 0;
+
+    for (final volume in book.volumes) {
+      for (final chapter in volume.chapters) {
+        switch (chapter.isRead) {
+          case BookStatus.completed:
+            completedChapters++;
+            break;
+          case BookStatus.reading:
+            readingChapters++;
+            break;
+          case BookStatus.planned:
+            plannedChapters++;
+            break;
+          case BookStatus.paused:
+            plannedChapters++; // считаем паузу как запланированную
+            break;
+        }
+      }
+    }
+
+    print("📊 Статистика прогресса:");
+    print("   ✅ Завершено глав: $completedChapters");
+    print("   📖 Читается глав: $readingChapters");
+    print("   📚 В планах глав: $plannedChapters");
+    print("   📖 Всего глав: ${completedChapters + readingChapters + plannedChapters}");
   }
 
   void _handlePageChange(int index) {
-    if (!_isReady || !_isInitialized) return;
+    if (!_isInitialized) return;
 // 
 //     print('🔄 [_handlePageChange] Пользователь перешел на под индексом: $index ');
 
@@ -213,10 +222,8 @@ class TextPageWidgetState extends State<TextPageWidget> {
   }
 
   Future<void> _saveCurrentProgress() async {
-//     print("ВЫЗОВ МЕТОДА _saveCurrentProgress()");
     try {
       if (_pages == null) return;
-
       final book = widget.book;
 
       int pageNumber = _currentPageIndex + 1;
@@ -233,9 +240,7 @@ class TextPageWidgetState extends State<TextPageWidget> {
 // 
       print('💾 [TEXT_PAGE] Сохраняем текущий прогресс: страница $pageNumber');
 
-      book.progress = book.getProgress;
       book.currentPage = _currentPageIndex + 1;
-
 
       if (pageNumber >= book.totalPages) {
         book.status = BookStatus.completed;
@@ -243,12 +248,6 @@ class TextPageWidgetState extends State<TextPageWidget> {
         book.status = BookStatus.reading;
       }
       _updateChapterProgress(book);
-//       print('💾 [TEXT_PAGE] Сохраняем прогресс:');
-//       print('   📄 Индекс: $_currentPageIndex');
-//       print('   🔢 Номер страницы: $pageNumber');
-//       print('   📊 Всего страниц: ${book.totalPages}');
-//       print('   📈 Прогресс: ${book.getProgress * 100}%');
-//       print('   🎨 Статус: ${book.status.name}');
 
       final booksTable = BooksTable();
       int result = await booksTable.updateBook(book);
@@ -260,29 +259,29 @@ class TextPageWidgetState extends State<TextPageWidget> {
   }
 
   @override
-  void dispose() {
-    // _saveCurrentProgress();
+  void dispose() async {
     _pageController?.dispose();
     super.dispose();
+    await _saveCurrentProgress();
   }
 
   @override
   Widget build(BuildContext context) {
-
-    if (_isLoading) {
-      return _buildLoadingScreen();
-    }
-
-    if (!_isReady) {
-      return _buildErrorScreen();
-    }
-
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (bool didPop, Object? result) async {
         await _saveCurrentProgress();
       },
-        child: Stack( // ← ОБЕРНУТЬ ВСЁ В STACK
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (widget.onScreenTap != null) {
+            widget.onScreenTap!();
+          } else {
+            print('❌ onScreenTap is NULL');
+          }
+        },
+        child: Stack(
           children: [
             Container(
               decoration: BoxDecoration(
@@ -292,50 +291,111 @@ class TextPageWidgetState extends State<TextPageWidget> {
                 controller: _pageController,
                 itemCount: _pages != null ? _pages!.length : 1,
                 onPageChanged: _handlePageChange,
+                physics: const PageScrollPhysics(),
                 itemBuilder: (context, index) {
                   return LayoutBuilder(
                     builder: (context, pageConstraints) {
                       return Container(
-                        color: widget.bookView.getBackgroundColor,
+                        color: bookView.getBackgroundColor,
                         padding: EdgeInsets.only(top:32, bottom: 16,left: 16,right: 16),
                         child: LayoutBuilder(
                           builder: (context, textConstraints) {
+                            // Получаем constraints синхронно
                             if (!_hasConstraints) {
                               _constraints = textConstraints;
                               _hasConstraints = true;
-//                               print("✅ Constraints получены: ${_constraints!.maxWidth}x${_constraints!.maxHeight}");
-                              // ЗАПУСКАЕМ ПАГИНАЦИЮ ПОСЛЕ ПОЛУЧЕНИЯ CONSTRAINTS
-                              if (_isReady && !_isPaginating) {
-                                _isInitialized = true;
-                                WidgetsBinding.instance.addPostFrameCallback((_) {
-                                  if (mounted) {
-                                    _isPaginating = true;
-                                    _loadAndPaginateText().then((_) {
-                                      _isPaginating = false;
+                              _isInitialized = true;
+                              // Запускаем асинхронную пагинацию после получения constraints
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() {
+                                    _paginationFuture = _loadAndPaginateText();
+                                  });
+                                }
+                              });
+                            }
+
+                            // Используем FutureBuilder для асинхронного отображения контента
+                            return FutureBuilder<List<String>>(
+                              future: _paginationFuture,
+                              builder: (context, snapshot) {
+                                // Пока загружается - показываем индикатор
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return _buildLoadingScreen();
+                                }
+
+                                // Если ошибка
+                                if (snapshot.hasError) {
+                                  return _buildErrorScreen();
+                                }
+
+                                // Если данные получены
+                                if (snapshot.hasData) {
+                                  List<String> pages = snapshot.data!;
+
+                                  if (pages.isEmpty) {
+                                    pages =[
+                                      "${"\t"*5} Книга пуста или не содержит текста для отображения.\n\n"
+                                          "${"\t"*5}Возможные причины:\n"
+                                          "${"\t"*10}• Файл поврежден\n"
+                                          "${"\t"*10}• Неподдерживаемый формат\n"
+                                          "${"\t"*10}• Текст отсутствует"
+                                    ]; // заглушка
+                                  }
+
+                                  // Сохраняем страницы в состоянии при первом получении
+                                  if (_pages == null) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      if (mounted) {
+                                        setState(() {
+                                          _pages = pages;
+                                          widget.book.totalPages = pages.length;
+
+                                          // Корректируем текущую страницу
+                                          if(pages.isNotEmpty){
+                                            _currentPageIndex = _currentPageIndex.clamp(0, pages.length - 1);
+                                          }
+                                          else{
+                                            _currentPageIndex = 0;
+                                          }
+                                        });
+
+                                        // Переходим на нужную страницу после загрузки
+                                        if (_pageController != null && _pageController!.hasClients) {
+                                          _pageController!.jumpToPage(_currentPageIndex);
+                                        }
+                                      }
                                     });
                                   }
-                                });
-                              }
-                            }
-                            if (_pages == null) {
-                              return Center(child: CircularProgressIndicator());
-                            }
-                            return Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.green, width: 3.0),
-                              ),
-                              child: SelectableText.rich(
-                                TextSpan(
-                                  text: _pages![index],
-                                  style: textStyle,
-                                ),
-                                textAlign: TextAlign.justify,
-                                onTap: () {
-                                  if (widget.onScreenTap != null) {
-                                    widget.onScreenTap!();
-                                  }
-                                },
-                              ),
+
+                                  // Отображаем текст страницы
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.green, width: 3.0),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: SelectableText(
+                                        pages.isNotEmpty && index < pages.length
+                                            ? pages[index]
+                                            : 'Страница не найдена',
+                                        style: TextStyle(
+                                            fontSize: bookView.fontSize,
+                                            color: bookView.getTextColor,
+                                            height: bookView.lineHeight,
+                                            fontFamily: 'Roboto'
+                                        ),
+                                        onTap: () {
+                                          if (widget.onScreenTap != null) {
+                                            widget.onScreenTap!();
+                                          }
+                                        },
+                                        textAlign: TextAlign.justify,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Center(child: CircularProgressIndicator());
+                              },
                             );
                           },
                         ),
@@ -346,19 +406,20 @@ class TextPageWidgetState extends State<TextPageWidget> {
               ),
             ),
 
-            // Слой с номером страницы (ПОВЕРХ ВСЕГО)
+            // Номер страницы поверх всего
             Positioned(
-              top: 5, // ← отступ от низа всего экрана
+              top: 5,
               left: 0,
               right: 0,
               child: Center(
                 child: Container(
                   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${_currentPageIndex + 1}/${_pages?.length ?? 0}',
+                    '${_currentPageIndex + 1}/${currentTotalPage ?? 0}',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -370,8 +431,10 @@ class TextPageWidgetState extends State<TextPageWidget> {
             ),
           ],
         ),
+      ),
     );
   }
+
 
   Future<void> readBookText(String filePath) async {
     try {
@@ -411,88 +474,108 @@ class TextPageWidgetState extends State<TextPageWidget> {
     return widget.book.lastSymbolIndex; // Возвращаем последнее сохраненное значение
   }
 
-  Future<void> _loadAndPaginateText() async {
+  Future<List<String>> _loadAndPaginateText() async {
     if (_constraints == null) {
-//       print('❌ Constraints еще не доступны');
-      return;
+      throw Exception('Constraints не инициализированы при вызове пагинации.');
     }
+    final int maxIndex = widget.book.totalPages > 0 ? widget.book.totalPages - 1 : 0;
+    if(widget.targetPage != null && widget.targetPage! > 1){
+      _currentPageIndex = widget.targetPage! - 1;
+    } else {
+      _currentPageIndex = (widget.book.currentPage - 1).clamp(0, maxIndex);
+    }
+
     double availableWidth = _constraints!.maxWidth;
     double availableHeight = _constraints!.maxHeight;
 // 
     print("🔄 [_loadAndPaginateText] Запуск пагинации. W:$availableWidth H:$availableHeight");
 
     List<String> calculatedPages = [];
-    int initialPageIndex = (widget.book.currentPage - 1).clamp(0, widget.book.totalPages - 1);
-
+    List<BookVolume> currentVolumes = currentBook!.volumes;
+    int currentPage = 0;
     final paginator = CoolTextPaginator();
-    PaginationResult result = PaginationResult(pages: [], targetPageIndex: 0);
 
-    if (widget.book.fileFormat.toLowerCase() == 'txt') {
-      if (textInBook.isEmpty) {
-        // Должно быть прочитано в _loadBookContent, но на всякий случай
-        await File(filePathToBook).readAsString().then((content) => textInBook = content);
-      }
+    for(BookVolume volume in currentVolumes){
+      List<VolumeChapter> currentChapter = volume.chapters;
+      currentPage++;
+      volume.startPage = currentPage;
 
-      final paginator = CoolTextPaginator();
-      final result = paginator.paginate(
-        text: textInBook,
-        availableWidth: availableWidth,
-        availableHeight: availableHeight,
-        textStyle: textStyle,
-      );
-
-      //TODO: перезаписть главу надо, условно пересоздать, так как она не пересоздаеться и не перещитваеться, просто останеться в бд
-
-      calculatedPages = result.pages;
-
-    } else if (widget.book.fileFormat.toLowerCase() == 'epub') {
-      try {
-        final bytes = await File(filePathToBook).readAsBytes();
-        final epubBook = await EpubReader.readBook(bytes);
-
-        // Используем утилиту, которую вы уже применяли в AddBookDialog
-        final parsedContent = EpubParserUtils.extractAndPaginateBook(
-            epubBook: epubBook,
-            availableWidth: availableWidth,
-            availableHeight: availableHeight,
-            textStyle: textStyle,
-            idBook: widget.book.id!,
-        );
-
-        calculatedPages = parsedContent.allBookPages;
-        widget.book.chapters = parsedContent.chapters;
-        // Ограничиваем индекс
-        initialPageIndex = initialPageIndex.clamp(0, calculatedPages.length - 1);
-
-      } catch (e) {
-//         print('❌ Ошибка пагинации EPUB: $e');
-        // Если ошибка, оставляем пустые страницы или показываем ошибку
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _pages = calculatedPages;
-        _currentPageIndex = initialPageIndex;
-        // Обновляем totalPages в объекте книги
-        widget.book.totalPages = _pages!.length;
-      });
-// 
-      print("coll _pages^ ${_pages!.length}");
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pageController != null && _pageController!.hasClients) {
-
-          // 🔥 ИСПРАВЛЕНИЕ: Убираем условие, чтобы всегда принудительно
-          // переходить на нужную страницу после загрузки контента
-          // if(_pageController!.initialPage != _currentPageIndex) {
-          _pageController!.jumpToPage(_currentPageIndex);
-          // }
-// 
-          print("✅ Переход на страницу: $_currentPageIndex");
+      if(volume.fileFolderPath != null){
+        final directory = Directory(volume.fileFolderPath!);
+        if (await directory.exists()) {
+          List<FileSystemEntity> entities = directory.listSync().toList();
+          for (FileSystemEntity entity in entities) {
+            if (entity is File && entity.path.endsWith('.txt')) {
+              try {
+                final filePath = await File(entity.path);
+                if(await filePath.exists()){
+                  print('Файл: ${volume.fileFolderPath} номер тома: ${volume.number}');
+                  String fileContent = await filePath.readAsString();
+                  final result = paginator.paginate(
+                    text: fileContent,
+                    availableWidth: availableWidth,
+                    availableHeight: availableHeight,
+                    textStyle: textStyle!,
+                  );
+                  calculatedPages.addAll(result.pages);
+                  currentPage += result.countPage - 1;
+                }
+              }catch (e){
+                print('Ошибка чтения файла ${entity.path}: $e');
+                AppGlobals.showError("Ошибка чтения файла ${entity.path}: $e");
+              }
+            }
+          }
         }
-      });
+      }
+      for(VolumeChapter chapter in currentChapter){
+        currentPage++;
+        final folderPath = chapter.fileFolderPath;
+        Directory directory = Directory(folderPath);
+        if (await directory.exists()) {
+          List<FileSystemEntity> entities = directory.listSync().toList();
+
+          chapter.startPage = currentPage;
+
+          for (FileSystemEntity entity in entities) {
+            if (entity is File && entity.path.endsWith('.txt')) {// Проверяем, что это файл
+              try {
+                final filePath = await File(entity.path);
+                if(await filePath.exists()){
+                  String fileContent = await filePath.readAsString();
+                  print('Файл: ${entity.path} номер тома: ${volume.number} номер главы: ${chapter.position}');
+                  final result = paginator.paginate(
+                    text: fileContent,
+                    availableWidth: availableWidth,
+                    availableHeight: availableHeight,
+                    textStyle: textStyle!,
+                  );
+                  calculatedPages.addAll(result.pages);
+                  currentPage += result.countPage - 1;
+                }
+              } catch (e) {
+                print('Ошибка чтения файла ${entity.path}: $e');
+                AppGlobals.showError("Ошибка чтения файла ${entity.path}: $e");
+              }
+            }
+          }// for (FileSystemEntity entity in entities)
+
+          chapter.endPage = currentPage;
+
+        } // if (await directory.exists())
+      } // for(VolumeChapter chapter in currentChapter)
+
+      volume.endPage = currentPage;
+
+    } // for(BookVolume volume in currentVolumes)
+    currentTotalPage = currentPage;
+    currentBook!.totalPages = currentTotalPage;
+    if (widget.onBookReady != null) {
+      print("📢 Уведомляем о готовности книги");
+      widget.onBookReady!(true);
     }
+    print("Второя страница: ${calculatedPages.length}");
+    return calculatedPages;
   }
 
   Widget _buildLoadingScreen() {
@@ -506,7 +589,7 @@ class TextPageWidgetState extends State<TextPageWidget> {
             'Загрузка книги...',
             style: TextStyle(
               fontSize: 16,
-              color: widget.bookView.getTextColor,
+              color: bookView.getTextColor,
             ),
           ),
         ],
@@ -525,7 +608,7 @@ class TextPageWidgetState extends State<TextPageWidget> {
             'Ошибка загрузки книги',
             style: TextStyle(
               fontSize: 16,
-              color: widget.bookView.getTextColor,
+              color: bookView.getTextColor,
             ),
           ),
           IconButton(

@@ -4,9 +4,6 @@ import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/core/database/tables/chapters_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
 import 'package:mangalibrary/core/services/app_info_service.dart';
-import 'package:mangalibrary/core/services/app_utils.dart';
-import 'package:mangalibrary/core/services/file_service.dart';
-import 'package:mangalibrary/enums/book_enums.dart';
 import 'package:mangalibrary/ui/book_details_screen/book_details_screen.dart';
 import 'package:mangalibrary/ui/library/BookTags.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +14,7 @@ import '../../domain/models/schedule.dart';
 import 'package:mangalibrary/core/database/tables/books_table.dart';
 import 'time_provider.dart';
 import 'package:mangalibrary/ui/add_book_dialog/add_book_dialog.dart';
+import 'package:mangalibrary/core/services/open_library_service.dart';
 
 
 class LibraryScreen extends StatefulWidget {
@@ -36,6 +34,8 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   bool _isExporting = false;
   String _exportStatus = '';
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final OpenLibraryService _service = OpenLibraryService();
+  late Future<List<OpenLibraryBook>> _booksFuture;
 
   final BooksTable _booksTable = BooksTable();
   final ChapterTable _chaptersTable = ChapterTable();
@@ -63,10 +63,10 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
       for (final book in booksFromDb) {
         if (book.id != null) {
           // Загружаем главы по ID книги
-          final chapters = await _chaptersTable.getChaptersByBookId(book.id!);
+          final chapters = await _chaptersTable.getChaptersByVolumeId(book.id!);
 
           // Присваиваем загруженные главы объекту Book
-          book.chapters = chapters;
+          // book.volumes = chapters; //TODO надо будет переделать
         }
       }
 
@@ -646,7 +646,8 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                     SizedBox(height: 4),
                   ],
                   Text(
-                    'Том ${book.currentChapterIndex}',
+                    '${book.currentVolume != null ? book.currentVolume!.title : ''} ${book.currentChapter != null ? ' | ${book.currentChapter?.title}' : ''}',
+                    maxLines: 2,
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[600],
@@ -669,7 +670,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                   ),
                   SizedBox(height: 8),
                   LinearProgressIndicator(
-                    value: book.progress,
+                    value: book.getProgress,
                     backgroundColor: Colors.grey[300],
                     color: Colors.deepPurple,
                     minHeight: 6,
@@ -679,7 +680,7 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${(book.progress * 100).toInt()}%',
+                        '${(book.getProgress * 100).toInt()}%',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey[600],
@@ -741,7 +742,6 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
   }
 
   void _openBookDetails(Book book) async {
-    print("_openBookDetails chaters: ${book.chapters.length} ");
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => BookDetailsScreen(
@@ -1003,46 +1003,46 @@ class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateM
                           ),
                         ),
                       ),
-                      Container(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            int current = 0;
-                            int total = 0;
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (context) => AlertDialog(
-                                title: Text('Пересчёт страниц'),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    CircularProgressIndicator(),
-                                    SizedBox(height: 16),
-                                    Text('Идёт пересчёт страниц...'),
-                                    SizedBox(height: 8),
-                                    Text('$current / $total'),
-                                  ],
-                                ),
-                              )
-                            );
-                            try{
-                              _loadLibraryData();
-                              Navigator.pop(context);
-                              AppGlobals.showSuccess('Пересчёт страниц завершён!');
-                            } catch (e) {
-                              Navigator.pop(context);
-                              AppGlobals.showError('Ошибка пересчёта: $e');
-                            }
-                          },
-                          label: Text('Пересичитать все страницы книг'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
+                      // Container(
+                      //   width: double.infinity,
+                      //   child: ElevatedButton.icon(
+                      //     onPressed: () async {
+                      //       int current = 0;
+                      //       int total = 0;
+                      //       showDialog(
+                      //         context: context,
+                      //         barrierDismissible: false,
+                      //         builder: (context) => AlertDialog(
+                      //           title: Text('Пересчёт страниц'),
+                      //           content: Column(
+                      //             mainAxisSize: MainAxisSize.min,
+                      //             children: [
+                      //               CircularProgressIndicator(),
+                      //               SizedBox(height: 16),
+                      //               Text('Идёт пересчёт страниц...'),
+                      //               SizedBox(height: 8),
+                      //               Text('$current / $total'),
+                      //             ],
+                      //           ),
+                      //         )
+                      //       );
+                      //       try{
+                      //         _loadLibraryData();
+                      //         Navigator.pop(context);
+                      //         AppGlobals.showSuccess('Пересчёт страниц завершён!');
+                      //       } catch (e) {
+                      //         Navigator.pop(context);
+                      //         AppGlobals.showError('Ошибка пересчёта: $e');
+                      //       }
+                      //     },
+                      //     label: Text('Пересичитать все страницы книг'),
+                      //     style: ElevatedButton.styleFrom(
+                      //       backgroundColor: Colors.orange,
+                      //       foregroundColor: Colors.white,
+                      //       padding: EdgeInsets.symmetric(vertical: 12),
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   ),
                 ),

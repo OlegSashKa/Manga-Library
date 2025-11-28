@@ -1,20 +1,21 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/chapters_table.dart';
+import 'package:mangalibrary/core/database/tables/volume_table.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
-import 'package:mangalibrary/domain/models/book.dart';
+import 'package:mangalibrary/domain/models/book_volume.dart';
 import 'package:mangalibrary/domain/models/volume_chapter.dart';
 import 'package:mangalibrary/enums/book_enums.dart';
 
 class ChapterSection extends StatefulWidget{
-  final int bookId; // Добавляем ID книги для загрузки глав
-  final List<VolumeChapter>? initialChapters; // Начальные главы (опционально)
+  final int bookId;
+  final List<BookVolume>? initialVolumes;
   final Function(int targetPage)? onChapterSelected;
 
   const ChapterSection({
     super.key,
-    required this.bookId, // Обязательный параметр - ID книги
-    this.initialChapters, // Необязательный параметр - начальные главы
+    required this.bookId,
+    this.initialVolumes,
     this.onChapterSelected,
   });
 
@@ -23,200 +24,194 @@ class ChapterSection extends StatefulWidget{
 }
 
 class _ChapterSectionState extends State<ChapterSection> {
-  int collViewBook = 5;
-  List<VolumeChapter> _chapters = []; // Список глав (будет загружаться из БД)
-  bool _isLoading = true; // Флаг загрузки
-  bool _hasError = false; // Флаг ошибки
-
   final ChapterTable _chaptersTable = ChapterTable();
-
-  void _showAllChapters(){
-    setState(() {
-      collViewBook = _chapters.length;
-    });
-  }
+  final VolumesTable _volumesTable = VolumesTable();
+  late Future<List<BookVolume>> _volumesFuture;
 
   @override
   void initState() {
     super.initState();
-    // Если переданы начальные главы - используем их
-    if (widget.initialChapters != null && widget.initialChapters!.isNotEmpty) {
-      _chapters = widget.initialChapters!;
-      _isLoading = false;
+    if (widget.initialVolumes != null && widget.initialVolumes!.isNotEmpty) {
+      _volumesFuture = Future.value(widget.initialVolumes!);
     } else {
-      // Иначе загружаем главы из базы данных
-      _loadChapters();
+      _volumesFuture = _loadVolumesAndChapters();
     }
   }
 
-  Future<void> _loadChapters() async {
+  Future<List<BookVolume>> _loadVolumesAndChapters() async {
     try {
-      setState(() {
-        _isLoading = true; // Показываем индикатор загрузки
-        _hasError = false; // Сбрасываем флаг ошибки
-      });
-      final List<VolumeChapter> loadedChapters = await _chaptersTable.getChaptersByBookId(widget.bookId);
-      setState(() {
-        _chapters = loadedChapters; // Сохраняем загруженные главы
-        _isLoading = false; // Скрываем индикатор загрузки
-      });
-      print("_chapters ${_chapters.first.title}");
-      // print('✅ Загружено глав: ${_chapters.length} для книги ID: ${widget.bookId}');
-    }catch (e){
-      // print('❌ Ошибка загрузки глав: $e');
-      setState(() {
-        _hasError = true; // Устанавливаем флаг ошибки
-        _isLoading = false; // Скрываем индикатор загрузки
-      });
+      List<BookVolume> volumes = await _volumesTable.getVolumesByBookId(widget.bookId);
+
+      await Future.wait(volumes.map((volume) async {
+        if (volume.id != null) {
+          volume.chapters = await _chaptersTable.getChaptersByVolumeId(volume.id!);
+        }
+      }));
+
+      return volumes;
+    } catch (e) {
+      rethrow;
     }
   }
 
   @override
-  Widget build(BuildContext context){
-    if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(), // Крутящийся индикатор
-            SizedBox(height: 16),
-            Text('Загрузка глав...'), // Текст загрузки
-          ],
-        ),
-      );
-    }
-    if (_hasError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, color: Colors.red, size: 48), // Иконка ошибки
-            SizedBox(height: 16),
-            Text('Ошибка загрузки глав'), // Текст ошибки
-            SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _loadChapters, // Кнопка повторной загрузки
-              child: Text('Попробовать снова'),
-            ),
-          ],
-        ),
-      );
-    }
-    if (_chapters.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.menu_book, color: Colors.grey, size: 48), // Иконка книги
-            SizedBox(height: 16),
-            Text('Главы не найдены'), // Текст пустого состояния
-            SizedBox(height: 8),
-            Text(
-              'Для этой книги еще не созданы главы',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-    return ListView(
-      children: [
-        // Список глав (показываем только первые collViewBook штук)
-        ..._chapters.take(collViewBook).map((chapter) => _buildChapterTile(chapter)),
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<BookVolume>>(
+      future: _volumesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Center(child: CircularProgressIndicator());
+        }
 
-        // Кнопка "Показать все" если глав больше чем collViewBook
-        if (_chapters.length > collViewBook)
-          Container(
-            margin: EdgeInsets.symmetric(vertical: 8),
-            child: TextButton(
-              onPressed: _showAllChapters,
-              child: Text(
-                'Показать все главы (еще ${_chapters.length - collViewBook})',
-                style: TextStyle(fontSize: 16),
+        if (snapshot.hasError) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            AppGlobals.showError('Не удалось загрузить Тома и Главы');
+          });
+          return Center(
+            child: Text(
+              'Ошибка загрузки данных: ${snapshot.error}',
+              style: TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        final List<BookVolume> volumes = snapshot.data ?? [];
+
+        if (volumes.isEmpty) {
+          return Center(child: Text('Нет доступных томов.'));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: BouncingScrollPhysics(),
+          itemCount: volumes.length,
+          itemBuilder: (context, volumeIndex) {
+            final volume = volumes[volumeIndex];
+
+            // Проверяем, есть ли у тома filePath для кликабельности
+            final bool isVolumeClickable = volume.fileFolderPath != null && volume.fileFolderPath!.isNotEmpty;
+
+            return Card(
+              margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              child: ExpansionTile(
+                title: GestureDetector(
+                  onTap: isVolumeClickable ? () => _openVolume(volume) : null,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          volume.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isVolumeClickable ? Colors.blue : Colors.black,
+                          ),
+                        ),
+                      ),
+                      if (isVolumeClickable)
+                        Icon(Icons.play_arrow, color: Colors.blue, size: 20),
+                    ],
+                  ),
+                ),
+                subtitle: GestureDetector(
+                  onTap: isVolumeClickable ? () => _openVolume(volume) : null,
+                  child: Text(
+                    'Страницы: ${_calculateCurrentPageInVolume(volume)}/${_calculateTotalPagesInVolume(volume)} | Глав: ${volume.chapters.length}',
+                    style: TextStyle(
+                      color: isVolumeClickable ? Colors.blue : null,
+                    ),
+                  ),
+                ),
+                children: [
+                  if (volume.chapters.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
+                      child: Text(
+                        'Нет глав в этом томе.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  else
+                    ...volume.chapters.map((chapter) =>
+                        _buildChapterListTile(chapter)).toList(),
+                ],
               ),
-            ),
-          ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildChapterTile(VolumeChapter chapter) {
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 4, horizontal: 0),
-      child: ListTile(
-        contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        leading: _buildChapterIcon(chapter), // Иконка статуса главы
-        title: Text(
-          chapter.title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: chapter.currentPage > 0 ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-        subtitle: _buildChapterSubtitle(chapter), // Подзаголовок с информацией
-        trailing: _buildChapterTrailing(chapter), // Дополнительная информация справа
-        onTap: () => _openChapter(chapter), // Обработчик нажатия на главу
-      ),
-    );
-  }
+  // Метод для открытия тома
+  void _openVolume(BookVolume volume) {
+    print('📖 Открыть том: \"${volume.title}\"');
+    print('📄 Страницы: ${volume.startPage}-${volume.endPage}');
+    print('📍 Путь к файлу: ${volume.fileFolderPath}');
 
-  Widget _buildChapterIcon(VolumeChapter chapter) {
-    if(chapter.isRead == BookStatus.completed){
-      return Icon(Icons.check_circle, color: Colors.green);
-    } else if (chapter.isRead == BookStatus.reading) {
-      return Icon(Icons.play_circle, color: Colors.orange);
-    } else{
-      return Icon(Icons.radio_button_unchecked, color: Colors.grey);
+    if (widget.onChapterSelected != null) {
+      widget.onChapterSelected!(volume.startPage);
     }
+  }
+
+  int _calculateCurrentPageInVolume(BookVolume volume) {
+    if (volume.book == null) return 0;
+    final currentInVolume = volume.book!.currentPage - volume.startPage + 1;
+    final totalInVolume = volume.endPage! - volume.startPage + 1;
+    return currentInVolume.clamp(0, totalInVolume);
+  }
+
+  int _calculateTotalPagesInVolume(BookVolume volume) {
+    return volume.endPage! - volume.startPage + 1;
+  }
+
+  Widget _buildChapterListTile(VolumeChapter chapter) {
+    return ListTile(
+      contentPadding: EdgeInsets.only(left: 32, right: 16),
+      title: Text(chapter.title),
+      subtitle: _buildChapterSubtitle(chapter),
+      trailing: _buildChapterTrailing(chapter),
+      onTap: () => _openChapter(chapter),
+    );
   }
 
   Widget _buildChapterSubtitle(VolumeChapter chapter) {
-    if(chapter.isRead == BookStatus.completed){
+    if (chapter.isRead == BookStatus.completed) {
       return Text('Прочитано');
-    } else if (chapter.isRead == BookStatus.reading){
-      return Text('Страница ${chapter.currentPage}/${chapter.endPage}');
+    } else if (chapter.isRead == BookStatus.reading) {
+      final currentInChapter = chapter.pageInChapter;
+      final totalInChapter = chapter.totalPagesInChapter ?? 1;
+      return Text('Страница $currentInChapter/$totalInChapter ${chapter.isRead.name}');
     } else {
       return Text('Не начато');
     }
   }
 
   Widget _buildChapterTrailing(VolumeChapter chapter) {
-    // Для прочитанных глав показываем галочку
     if (chapter.isRead == BookStatus.completed) {
       return Icon(Icons.done_all, color: Colors.green);
-    }
-    // Для глав в процессе показываем текущую страницу
-    else if (chapter.isRead == BookStatus.reading) {
+    } else if (chapter.isRead == BookStatus.reading) {
+      final currentInChapter = chapter.pageInChapter;
+      final totalInChapter = chapter.totalPagesInChapter ?? 1;
       return Text(
-        '${chapter.currentPage}/${chapter.endPage}',
+        '$currentInChapter/$totalInChapter',
         style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.blue,
         ),
       );
-    }
-    // Для не начатых глав ничего не показываем
-    else {
-      return SizedBox.shrink(); // Пустой виджет
+    } else {
+      return SizedBox.shrink();
     }
   }
 
   void _openChapter(VolumeChapter chapter) {
-    // print('📖 Открыть главу: "${chapter.title}"');
-    // print('📄 Страницы: ${chapter.startPage}-${chapter.endPage}');
-    // print('📍 Текущая страница: ${chapter.currentPage}');
+    print('📖 Открыть главу: \"${chapter.title}\"');
+    print('📄 Страницы: ${chapter.startPage}-${chapter.endPage}');
+    print('📍 Текущая страница: ${chapter.pageInChapter}');
 
-    if(widget.onChapterSelected != null)
+    if (widget.onChapterSelected != null) {
       widget.onChapterSelected!(chapter.startPage);
-
-    // Можно показать временное уведомление
-    AppGlobals.showInfo('Открываем главу: ${chapter.title}');
-  }
-  void updateChapters(List<VolumeChapter> newChapters) {
-    setState(() {
-      _chapters = newChapters;
-      _isLoading = false;
-      _hasError = false;
-    });
+    }
   }
 }

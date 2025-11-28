@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/services/app_globals.dart';
-import 'package:mangalibrary/core/database/database_helper.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:provider/provider.dart';
 import 'package:mangalibrary/ui/library/library_screen.dart';
@@ -10,6 +9,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await AppInfoService.instance.initialize();
+  await BookView.loadFromDatabase();
 
   runApp(MangaLibraryApp());
 }

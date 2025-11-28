@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
@@ -14,84 +15,16 @@ abstract class TextPaginator {
 class PaginationResult {
   final List<String> pages;
   final int targetPageIndex;
+  final int countPage;
 
   PaginationResult({
     required this.pages,
     required this.targetPageIndex,
+    required this.countPage
   });
 }
 
 class CoolTextPaginator extends TextPaginator {
-
-  String formatBookTextOptimized(String text) {
-    final buffer = StringBuffer('\u00A0\u00A0\u00A0\u00A0\u00A0');
-    const String indent = '\u00A0\u00A0\u00A0\u00A0\u00A0';
-
-    // Флаги состояния
-    bool inParagraph = false;
-    bool previousWasNewline = false;
-
-    // Новый флаг для пропуска пробелов после \n
-    bool shouldSkipSpace = false;
-
-    for (int i = 0; i < text.length; i++) {
-      final char = text[i];
-
-      // Символы, которые нужно игнорировать всегда
-      if (char == '\r' || char == '\t' || char == '\u00A0') {
-        continue;
-      }
-
-      // Если мы должны пропустить пробел, и текущий символ - пробел, пропускаем его.
-      if (shouldSkipSpace && char == ' ') {
-        continue;
-      }
-
-      if (char == '\n') {
-        // Мы встретили \n, сбрасываем флаг, который мог быть установлен пробелом
-        shouldSkipSpace = true;
-
-        if (previousWasNewline && inParagraph) {
-          // Двойной \n - конец абзаца
-          buffer.write('\n$indent'); // Используем \n\n для вертикального интервала
-          inParagraph = false;
-          previousWasNewline = false;
-        } else {
-          // Одинарный \n (мягкий перенос строки)
-          buffer.write('\n');
-          previousWasNewline = true;
-        }
-
-      } else {
-        // Обычный символ (включая ' ')
-
-        // Как только мы видим любой контентный символ (включая ' '),
-        // мы больше не пропускаем пробелы в начале (так как они уже внутри абзаца)
-        shouldSkipSpace = false;
-
-        if (!inParagraph) {
-          inParagraph = true;
-        }
-
-        // ВАЖНОЕ ИЗМЕНЕНИЕ: Отступ добавляется только при ДВОЙНОМ \n
-        if (previousWasNewline && inParagraph) {
-          // Если предыдущий был \n, а текущий символ - НЕ \n,
-          // это означает, что предыдущий \n был одиночным переносом строки.
-          // В вашей старой логике здесь добавлялся отступ,
-          // что и приводило к отступу при мягком переносе.
-          // Мы просто пропускаем этот блок, чтобы не добавлять отступ.
-
-          // Если вы хотите, чтобы одиночный \n всегда давал отступ (как в старой логике):
-          buffer.write(indent);
-        }
-
-        buffer.write(char);
-        previousWasNewline = false;
-      }
-    }
-    return buffer.toString();
-  }
-
 
   @override
   PaginationResult paginate({
@@ -100,7 +33,7 @@ class CoolTextPaginator extends TextPaginator {
     required double availableHeight,
     required TextStyle textStyle,
   }) {
-    text = formatBookTextOptimized(text);
+    // text = formatBookTextOptimized(text);
     // print("text: \n$text");
 
     availableWidth = (availableWidth * 0.955).floorToDouble();
@@ -140,14 +73,16 @@ class CoolTextPaginator extends TextPaginator {
       // ДОБАВЛЯЕМ СТРАНИЦУ
       pages.add(pageText);
 
+      // print("СТРАНИЦА ${pages.length} ${pageText.substring(0,min(100, pageText.length))}");
+
       String newRemainingText = remainingText.substring(pageText.length);
-
-
+      // print("ОСТАВШИЙСЯ ТЕКСТ: ${pages.length} ${newRemainingText.substring(0,min(100, newRemainingText.length))}");
       int index = 0;
       while (index < newRemainingText.length && whitespaceCharacters.contains(newRemainingText[index])) {
         index++;
       }
       remainingText = newRemainingText.substring(index);
+      // print("ПОСЛЕ ПРОВЕРКИ НА ПРОБЕЛЫ: ${pages.length} ${remainingText.substring(0,min(100, remainingText.length))}");
       if (remainingText.isEmpty && pageNumber < pages.length) {
         break;
       }
@@ -157,6 +92,7 @@ class CoolTextPaginator extends TextPaginator {
     return PaginationResult(
       pages: pages,
       targetPageIndex: 0,
+      countPage: pages.length
     );
   }
 

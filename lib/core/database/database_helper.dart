@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/services/file_service.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -26,7 +27,12 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'mangalibrary_book.db');
     return await openDatabase(
-      path, version: 2, onCreate: _createTables,
+        path,
+        version: 3,
+        onCreate: _createTables,
+        onConfigure: (db) async {
+          await db.execute('PRAGMA foreign_keys = ON');
+        }
     );
   }
 
@@ -38,40 +44,52 @@ class DatabaseHelper {
     author TEXT,
     bookType TEXT NOT NULL,
     file_folder_path TEXT NOT NULL,
-    file_path TEXT NOT NULL,
     file_format TEXT NOT NULL,
     file_size INTEGER NOT NULL,
-    current_page INTEGER DEFAULT 0,
-    total_pages INTEGER DEFAULT 0,
+    current_page INTEGER DEFAULT 1,
+    total_pages INTEGER DEFAULT 1,
     last_symbol_index INTEGER DEFAULT 0,
-    progress REAL DEFAULT 0.0,
     cover_image_path TEXT,
     status TEXT DEFAULT 'planned',
     added_date INTEGER NOT NULL,
     last_date_open INTEGER NOT NULL,
     reading_time INTEGER DEFAULT 0,
     is_favorite INTEGER DEFAULT 0,
-    tags TEXT,
-    current_chapter_index INTEGER DEFAULT 0
+    tags TEXT
   )
 ''');
     await db.execute('''
     CREATE TABLE chapters(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      book_id INTEGER NOT NULL,
+      volume_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       start_page INTEGER NOT NULL,
-      end_page INTEGER,
-      current_page INTEGER DEFAULT 0,
+      end_page INTEGER DEFAULT 0,
       is_read TEXT DEFAULT 'planned',
-      read_time INTEGER,
+      read_time INTEGER DEFAULT 0,
       position INTEGER DEFAULT 0,
-      FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+      file_folder_path TEXT NOT NULL,
+      FOREIGN KEY (volume_id) REFERENCES volumes (id) ON DELETE CASCADE
     )
-  ''');
+''');
     await db.execute('''
-      CREATE INDEX idx_chapters_book_id ON chapters(book_id)
-  ''');
+  CREATE INDEX idx_chapters_volume_id ON chapters(volume_id)
+''');
+    await db.execute('''
+  CREATE TABLE volumes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    file_folder_path TEXT DEFAULT NULL,
+    start_page INTEGER NOT NULL,
+    end_page INTEGER,
+    FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+  )
+''');
+    await db.execute('''
+  CREATE INDEX idx_volumes_book_id ON volumes(book_id)
+''');
     await db.execute('''
       CREATE TABLE book_view_settings(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,12 +99,18 @@ class DatabaseHelper {
         text_color INTEGER NOT NULL DEFAULT 4278190080
       )
     ''');
-    await db.insert('book_view_settings', {
-      'font_size': 16.0,
-      'line_height': 1.5,
-      'background_color': 0xFFFFFFFF, // белый
-      'text_color': 0xFF000000, // черный
-    });
+    try {
+      await db.insert('book_view_settings', {
+        'id': 1,
+        'font_size': 16.0,
+        'line_height': 1.5,
+        'background_color': Colors.white.toARGB32(),
+        'text_color': Colors.black.toARGB32(),
+      });
+    } catch (e) {
+      // Игнорируем ошибку если запись уже существует
+      print('⚠️ Запись настроек уже существует или ошибка: $e');
+    }
   }
 
   Future<void> exportEverythingToDownloads() async {
@@ -94,15 +118,10 @@ class DatabaseHelper {
 
     try {
       // 1. Экспортируем базу данных
-      // print('📀 ЭКСПОРТ БАЗЫ ДАННЫХ...');
       final String dbPath = await exportDatabaseToDownloads();
-      // print('✅ БАЗА ДАННЫХ ЭКСПОРТИРОВАНА: $dbPath');
 
       // 2. Экспортируем все книги
-      // print('📚 ЭКСПОРТ КНИГ...');
       await FileService.exportBooksToDownloadsSimple();
-
-      // print('🎉 ВСЯ БИБЛИОТЕКА УСПЕШНО ЭКСПОРТИРОВАНА!');
 
     } catch (e) {
       // print('💥 ОШИБКА ЭКСПОРТА: $e');
@@ -110,13 +129,6 @@ class DatabaseHelper {
     }
   }
 
-  /// Экспортирует базу данных в папку загрузок (Downloads)
-  ///
-  /// Этот метод выполняет следующие действия:
-  /// 1. Получает путь к исходной базе данных приложения
-  /// 2. Создает папку для экспорта в Downloads если её нет
-  /// 3. Копирует файл базы данных с новым именем
-  /// 4. Возвращает путь к экспортированному файлу
   Future<String> exportDatabaseToDownloads() async {
     try {
       // 1. Получаем путь к исходной БД
@@ -125,28 +137,18 @@ class DatabaseHelper {
       final sourceFile = File(sourceDatabasePath);
       bool fileExists = await sourceFile.exists();
 
-      // print('🟡 Файл БД существует: $fileExists');
-      // print('🟡 Путь к файлу: $sourceDatabasePath');
-
       // 2. Получаем папку загрузок устройства через библиотеку
       Directory downloadDirectory = await downloadsfolder.getDownloadDirectory();
-      if (downloadDirectory == null) {
-        throw Exception('Не удалось получить папку загрузок');
-      }
-//       print('🟡 Папка загрузок: $downloadDirectory');
 
       // 3. Создаем папку для бэкапов внутри папки загрузок
       final backupFolder = Directory(join(downloadDirectory.path, 'MangaLibrary_Backup'));
       if (!await backupFolder.exists()) {
         await backupFolder.create(recursive: true);
       }
-//       print('🟡 Путь для бэкапа: ${backupFolder.path}');
-
       // 4. Формируем конечный путь с именем файла
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final exportedFileName = 'mangalibrary_book_backup_$timestamp.db';
       final exportedDatabasePath = join(backupFolder.path, exportedFileName);
-//       print('🟡 Конечный путь: $exportedDatabasePath');
 
       // 5. Копируем файл
       await sourceFile.copy(exportedDatabasePath);

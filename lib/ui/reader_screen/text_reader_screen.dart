@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mangalibrary/core/database/tables/book_view_table.dart';
-import 'package:mangalibrary/core/services/app_globals.dart';
+import 'package:mangalibrary/core/services/book_view_service.dart';
 import 'package:mangalibrary/domain/models/book.dart';
 import 'package:mangalibrary/domain/models/bookView.dart';
 import 'package:mangalibrary/ui/reader_screen/text_page_widget.dart';
 
+//TODO этот класс должен читать книгу с учетом нашей иерархии
+//TODO поидее сильно тут менять ничего не надо, я думаю с text_page_widget придется покапатся
 class TextReaderScreen extends StatefulWidget {
   final Book book;
   final int? targetPage;
@@ -21,7 +23,7 @@ class TextReaderScreen extends StatefulWidget {
 
 class _TextReaderScreenState extends State<TextReaderScreen> {
     bool _showAppBar = false;
-    BookView _bookView = BookView.defaultSettings();
+    final _bookView = BookView.instance;
     bool _isBookReady = false;
     final GlobalKey<TextPageWidgetState> _textPageKey = GlobalKey<TextPageWidgetState>();
 
@@ -29,7 +31,6 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       setState(() {
         _isBookReady = isRead;
       });
-      // print("ISBOOKREAD^ $_isBookReady");
     }
 
     void _toggleAppBar() {
@@ -43,103 +44,60 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     @override
     void initState() {
       super.initState();
-      _loadSettings();
-      // print("TEXT_READER_SCREEN");
-      // print("BOOK currentPage: ${widget.book.currentPage}");
+      _initializeSettings();
     }
 
-    Future<void> _loadSettings() async {
-      try{
-        final settings = await BookViewTable.getSettings();
-        setState(() {
-          _bookView = settings;
-        });
-      }catch(e){
-        // print('Ошибка загрузки настроек: $e');
-        setState(() {
-        });
+
+    Future<void> _initializeSettings() async {
+      // 🔥 ЗАГРУЖАЕМ НАСТРОЙКИ ИЗ БД В СИНГЛТОН
+      await BookView.loadFromDatabase();
+      if (mounted) {
+        setState(() {});
       }
     }
 
-    void _changeLineHeight() {
+    void _changeLineHeight() async {
       final double newLineHeight = _bookView.lineHeight <= 1 ? 1 : _bookView.lineHeight - 0.25;
-      final updatedBookView = BookView(
-        id: _bookView.id,
-        fontSize: _bookView.fontSize,
+
+      await BookView.updateSettings(
         lineHeight: newLineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
       );
-
-      setState(() {
-        _bookView = updatedBookView;
-      });
-
-      BookViewTable.updateSettings(updatedBookView);
       _textPageKey.currentState?.reloadPages();
+      setState(() {});
     }
 
-    void _changeLineLower() {
+    void _changeLineLower() async {
       final double newLineHeight = _bookView.lineHeight >= 5 ? 5 : _bookView.lineHeight + 0.25;
 
-      final updatedBookView = BookView(
-        id: _bookView.id,
-        fontSize: _bookView.fontSize,
+      await BookView.updateSettings(
         lineHeight: newLineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
       );
-
-      setState(() {
-        _bookView = updatedBookView;
-      });
-
-      BookViewTable.updateSettings(updatedBookView);
       _textPageKey.currentState?.reloadPages();
+      setState(() {});
     }
 
-    void _increaseFontSize() {
+    void _increaseFontSize() async {
       final double newFontSize = _bookView.fontSize + 3 >= 32 ? 32 : _bookView.fontSize + 3;
-      // print("newFontSize " + newFontSize.toString());
 
-      final updatedBookView = BookView(
-        id: _bookView.id,
+      await BookView.updateSettings(
         fontSize: newFontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
       );
-
-      // Точечное обновление в базе
-      setState(() {
-        _bookView = updatedBookView;
-      });
-
-      BookViewTable.updateSettings(updatedBookView);
       _textPageKey.currentState?.reloadPages();
+      setState(() {});
     }
 
-    void _decreaseFontSize() {
+    void _decreaseFontSize() async {
       final double newFontSize = _bookView.fontSize - 3 <= 14 ? 14 : _bookView.fontSize - 3;
-      // print("newFontSize " + newFontSize.toString());
-      final updatedBookView = BookView(
-        id: _bookView.id,
+
+      await BookView.updateSettings(
         fontSize: newFontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: _bookView.backgroundColor,
-        textColor: _bookView.textColor,
       );
-
-      setState(() {
-        _bookView = updatedBookView;
-      });
-
-      BookViewTable.updateSettings(updatedBookView);
       _textPageKey.currentState?.reloadPages();
+      setState(() {});
     }
 
 
-    void _toggleDarkMode() {
+    void _toggleDarkMode() async {
       final newBackgroundColor = _bookView.getBackgroundColor == Colors.white
           ? Colors.black.toARGB32()
           : Colors.white.toARGB32();
@@ -147,20 +105,12 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
           ? Colors.black.toARGB32()
           : Colors.white.toARGB32();
 
-      final updatedBookView = BookView(
-        id: _bookView.id,
-        fontSize: _bookView.fontSize,
-        lineHeight: _bookView.lineHeight,
-        backgroundColor: newBackgroundColor,
+      await BookView.updateSettings(
         textColor: newTextColor,
+        backgroundColor: newBackgroundColor,
       );
-
-      setState(() {
-        _bookView = updatedBookView;
-      });
-
-      BookViewTable.updateSettings(updatedBookView);
-      _textPageKey.currentState?.reloadPages();
+      // _textPageKey.currentState?.reloadPages();
+      setState(() {});
     }
 
     @override
@@ -172,15 +122,12 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
         backgroundColor: _backgroundColor,
         body: Stack(
           children: [
-            // Основной контент БЕЗ отступов
-            GestureDetector(
-              onTap: _toggleAppBar,
-              child: Container(
-                color: _backgroundColor,
-                width: double.infinity,
-                height: double.infinity,
-                child: _buildContent(),
-              ),
+            // Основной контент БЕЗ GestureDetector (он теперь в TextPageWidget)
+            Container(
+              color: _backgroundColor,
+              width: double.infinity,
+              height: double.infinity,
+              child: _buildContent(),
             ),
 
             // AppBar с ограниченной высотой
@@ -286,7 +233,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                       Icon(Icons.format_line_spacing, color: _textColor),
                       SizedBox(width: 8),
                       Text('Высота строки: ${_bookView.lineHeight}', style: TextStyle(color: _textColor)),
-                      Icon(Icons.remove, color: Colors.black),
+                      Icon(Icons.remove, color: _textColor),
                     ],
                   ),
                 ),
@@ -297,7 +244,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                       Icon(Icons.format_line_spacing, color: _textColor),
                       SizedBox(width: 8),
                       Text('Высота строки: ${_bookView.lineHeight}', style: TextStyle(color: _textColor)),
-                      Icon(Icons.add, color: Colors.black),
+                      Icon(Icons.add, color: _textColor),
                     ],
                   ),
                 ),
@@ -313,9 +260,8 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       return SafeArea(
         child: TextPageWidget(
           key: _textPageKey,
-          bookView: _bookView,
           book: widget.book,
-          onScreenTap: _isBookReady ? _toggleAppBar : null,
+          onScreenTap: _toggleAppBar, //_toggleAppBar
           onBookReady: _onBookReady,
           targetPage: widget.targetPage,
         ),
